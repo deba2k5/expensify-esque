@@ -1,82 +1,73 @@
-export type AppRole = 'employee' | 'manager' | 'finance';
-export type ExpenseStatus = 'draft' | 'submitted' | 'manager_approved' | 'approved' | 'rejected' | 'reimbursed';
-export type ApprovalLevel = 'manager' | 'finance';
+export type Role = "employee" | "super_admin" | "department_manager" | "hr_officer";
 
-export interface Profile {
-  id: string;
-  full_name: string;
+export type EmployeeType = "permanent" | "contractual";
+
+export interface EmployeeProfile {
+  employeeId: string;
+  fullName: string;
+  email: string;
+  mobile: string;
   department: string;
-  manager_id: string | null;
-  created_at: string;
-  updated_at: string;
+  employeeType: EmployeeType;
+  active: boolean;
+  createdAt: string;
 }
 
-export interface UserRole {
+export type WorkType =
+  | "on_site"
+  | "remote"
+  | "work_from_home"
+  | "office_administration"
+  | "client_meeting"
+  | "training"
+  | "maintenance"
+  | "other";
+
+export type BreakType = "lunch" | "short" | "prayer" | "other";
+
+export interface BreakEntry {
   id: string;
-  user_id: string;
-  role: AppRole;
+  type: BreakType;
+  start: string;
+  end?: string;
 }
 
-export interface ExpenseCategory {
-  id: string;
-  name: string;
-  description: string;
+export interface LocationPing {
+  lat: number;
+  lng: number;
+  accuracy: number;
+  at: string;
+  outsideGeofence?: boolean;
 }
 
-export interface Expense {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  amount: number;
-  currency: string;
-  merchant: string;
-  expense_date: string;
-  category_id: string | null;
-  cost_center: string;
-  status: ExpenseStatus;
-  created_at: string;
-  updated_at: string;
-  // Joined fields
-  category?: ExpenseCategory;
-  profile?: Profile;
-  receipts?: ExpenseReceipt[];
-  approval_actions?: ApprovalAction[];
-}
+export type Status = "pending" | "approved" | "rejected";
 
-export interface ExpenseReceipt {
+export interface WorkSession {
   id: string;
-  expense_id: string;
-  file_path: string;
-  file_name: string;
-  uploaded_at: string;
-}
-
-export interface ApprovalAction {
-  id: string;
-  expense_id: string;
-  approver_id: string;
-  action: 'approved' | 'rejected';
-  comments: string;
-  level: ApprovalLevel;
-  created_at: string;
-  approver?: Profile;
+  employeeId: string;
+  email: string;
+  fullName: string;
+  date: string; // YYYY-MM-DD
+  clockIn: string;
+  clockOut?: string;
+  workType?: WorkType;
+  description?: string;
+  breaks: BreakEntry[];
+  locations: LocationPing[];
+  attachments: { name: string; url: string; type: string }[];
+  totalWorkMs?: number;
+  totalBreakMs?: number;
+  status: Status;
+  adminComment?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 export interface AuditLog {
   id: string;
-  expense_id: string | null;
-  user_id: string;
+  actor: string;
   action: string;
-  details: Record<string, unknown>;
-  created_at: string;
+  target?: string;
+  at: string;
+  meta?: Record<string, unknown>;
 }
-
-export const STATUS_CONFIG: Record<ExpenseStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className: string }> = {
-  draft: { label: 'Draft', variant: 'secondary', className: 'bg-muted text-muted-foreground' },
-  submitted: { label: 'Submitted', variant: 'default', className: 'bg-info text-info-foreground' },
-  manager_approved: { label: 'Manager Approved', variant: 'outline', className: 'bg-warning/20 text-warning' },
-  approved: { label: 'Approved', variant: 'default', className: 'bg-success text-success-foreground' },
-  rejected: { label: 'Rejected', variant: 'destructive', className: 'bg-destructive text-destructive-foreground' },
-  reimbursed: { label: 'Reimbursed', variant: 'default', className: 'bg-primary text-primary-foreground' },
-};

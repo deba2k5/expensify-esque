@@ -1,171 +1,83 @@
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import {
-  LayoutDashboard, Receipt, PlusCircle, Users, CheckSquare,
-  Building2, BarChart3, LogOut, ChevronDown, PieChart, MessageSquare,
-} from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { NavLink } from '@/components/NavLink';
-import { useAuth } from '@/hooks/useAuth';
-import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
-  SidebarGroupContent, SidebarGroupLabel, SidebarHeader,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
-} from '@/components/ui/sidebar';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+  Clock,
+  FileBarChart,
+  User,
+  LayoutDashboard,
+  Users,
+  CheckSquare,
+  Map,
+  ScrollText,
+  LogOut,
+  PieChart,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-const employeeItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'New Expense', url: '/expenses/new', icon: PlusCircle },
-  { title: 'My Expenses', url: '/expenses', icon: Receipt },
-  { title: 'Analytics', url: '/analytics', icon: PieChart },
-  { title: 'Ask AI', url: '/ask-ai', icon: MessageSquare },
-];
+const linkBase =
+  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors";
+const linkActive = "bg-primary/10 text-primary";
 
-const managerItems = [
-  { title: 'Team Dashboard', url: '/manager', icon: Users },
-  { title: 'Pending Approvals', url: '/manager/approvals', icon: CheckSquare },
-];
+export default function AppSidebar() {
+  const { role, profile, signOut, user } = useAuth();
+  const nav = useNavigate();
+  const isAdmin = role !== "employee";
 
-const financeItems = [
-  { title: 'Finance Dashboard', url: '/finance', icon: Building2 },
-  { title: 'All Expenses', url: '/finance/expenses', icon: Receipt },
-  { title: 'Reports', url: '/finance/reports', icon: BarChart3 },
-];
-
-export function AppSidebar() {
-  const { state, isMobile } = useSidebar();
-  const collapsed = !isMobile && state === 'collapsed';
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { profile, hasRole, signOut } = useAuth();
-
-  const isActive = (path: string) => location.pathname === path;
-  const initials = profile?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
-  };
+  const items = isAdmin
+    ? [
+        { to: "/admin", label: "Overview", icon: LayoutDashboard, end: true },
+        { to: "/admin/employees", label: "Employees", icon: Users },
+        { to: "/admin/approvals", label: "Pending Reports", icon: CheckSquare },
+        { to: "/admin/map", label: "Live Map", icon: Map },
+        { to: "/admin/analytics", label: "Analytics", icon: PieChart },
+        { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
+      ]
+    : [
+        { to: "/", label: "Dashboard", icon: Clock, end: true },
+        { to: "/reports", label: "My Reports", icon: FileBarChart },
+        { to: "/profile", label: "Profile", icon: User },
+      ];
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-                <Receipt className="h-4 w-4 text-primary-foreground" />
-              </div>
-              {!collapsed && <span className="font-bold text-lg">ExpenseDesk</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-
-      <SidebarContent>
-        {/* Employee section - always visible */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Expenses</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {employeeItems.map(item => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} end>
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Manager section */}
-        {hasRole('manager') && (
-          <Collapsible defaultOpen className="group/collapsible">
-            <SidebarGroup>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="cursor-pointer">
-                  Manager
-                  {!collapsed && <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />}
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {managerItems.map(item => (
-                      <SidebarMenuItem key={item.url}>
-                        <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                          <NavLink to={item.url} end>
-                            <item.icon className="h-4 w-4" />
-                            {!collapsed && <span>{item.title}</span>}
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
-        )}
-
-        {/* Finance section */}
-        {hasRole('finance') && (
-          <Collapsible defaultOpen className="group/collapsible">
-            <SidebarGroup>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="cursor-pointer">
-                  Finance
-                  {!collapsed && <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />}
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {financeItems.map(item => (
-                      <SidebarMenuItem key={item.url}>
-                        <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                          <NavLink to={item.url} end>
-                            <item.icon className="h-4 w-4" />
-                            {!collapsed && <span>{item.title}</span>}
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
-        )}
-      </SidebarContent>
-
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleSignOut}>
-              <LogOut className="h-4 w-4" />
-              {!collapsed && <span>Sign Out</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          {!collapsed && (
-            <SidebarMenuItem>
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-medium truncate">{profile?.full_name || 'User'}</span>
-                  <span className="text-xs text-sidebar-foreground/60 truncate">{profile?.department}</span>
-                </div>
-              </div>
-            </SidebarMenuItem>
-          )}
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
+    <aside className="w-60 shrink-0 border-r bg-sidebar flex flex-col">
+      <div className="h-16 flex items-center px-5 border-b">
+        <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold mr-3">
+          +
+        </div>
+        <div>
+          <div className="text-sm font-semibold leading-tight">Sinhas Track</div>
+          <div className="text-[11px] text-muted-foreground">
+            {isAdmin ? "Admin Console" : "Employee Portal"}
+          </div>
+        </div>
+      </div>
+      <nav className="flex-1 p-3 space-y-1">
+        {items.map((it) => (
+          <NavLink
+            key={it.to}
+            to={it.to}
+            end={it.end}
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : ""}`}
+          >
+            <it.icon className="h-4 w-4" /> {it.label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="border-t p-3 text-xs">
+        <div className="font-medium truncate">{profile?.fullName || user?.email}</div>
+        <div className="text-muted-foreground truncate">{user?.email}</div>
+        <Button
+          onClick={async () => {
+            await signOut();
+            nav("/login");
+          }}
+          variant="ghost"
+          size="sm"
+          className="mt-2 w-full justify-start text-muted-foreground"
+        >
+          <LogOut className="h-4 w-4 mr-2" /> Sign out
+        </Button>
+      </div>
+    </aside>
   );
 }
