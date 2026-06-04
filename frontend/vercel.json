@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "env": {
+    "VITE_MONGODB_API_URL": "@mongodb_api_url",
+    "VITE_WS_URL": "@ws_url",
+    "VITE_GOOGLE_DRIVE_UPLOAD_URL": "@google_drive_url",
+    "VITE_ADMIN_EMAILS": "@admin_emails"
+  }
+}

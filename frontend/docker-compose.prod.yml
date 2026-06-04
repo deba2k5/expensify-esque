@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  backend:
+    image: your-registry/sinhas-track-backend:latest
+    container_name: sinhas_track_backend_prod
+    environment:
+      MONGODB_URI: ${MONGODB_URI}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID}
+      FLASK_ENV: production
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - prod_network
+
+  frontend:
+    image: your-registry/sinhas-track-frontend:latest
+    container_name: sinhas_track_frontend_prod
+    environment:
+      VITE_MONGODB_API_URL: ${VITE_MONGODB_API_URL}
+      VITE_WS_URL: ${VITE_WS_URL}
+      VITE_GOOGLE_DRIVE_UPLOAD_URL: ${VITE_GOOGLE_DRIVE_UPLOAD_URL}
+      VITE_ADMIN_EMAILS: ${VITE_ADMIN_EMAILS}
+    ports:
+      - "80:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    networks:
+      - prod_network
+
+networks:
+  prod_network:
+    driver: bridge
