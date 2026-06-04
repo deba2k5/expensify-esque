@@ -17,7 +17,5 @@
     "GOOGLE_DRIVE_FOLDER_ID": "@google_drive_folder_id",
     "FLASK_ENV": "production",
     "ADMIN_EMAILS": "@admin_emails"
-  },
-  "buildCommand": "pip install -r requirements.txt",
-  "framework": "flask"
+  }
 }

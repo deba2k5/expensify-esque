@@ -1,33 +1,33 @@
 import os
+import json
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from pymongo import MongoClient, DESCENDING
 from pymongo.errors import DuplicateKeyError
 from bson.objectid import ObjectId
+import requests
 
 load_dotenv()
 
 app = Flask(__name__)
-
-# CORS configuration for Vercel frontend
-CORS(app, resources={r"/api/*": {
-    "origins": [
-        "https://*.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000"
-    ]
-}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # MongoDB Connection
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://username:password@cluster.mongodb.net/workforce-vision")
-client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+client = MongoClient(MONGODB_URI)
 db = client["workforce-vision"]
 profiles_collection = db["profiles"]
 sessions_collection = db["sessions"]
 audit_collection = db["audit_logs"]
+
+# Google Drive Configuration
+GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "1i5eJ2S3LVEsnEYI8gpljk-E0eoq6rCSb")
+GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "")
 
 # Create indexes
 try:
@@ -60,6 +60,8 @@ def log_audit(actor, action, target, meta=None):
         "meta": meta or {},
     }
     audit_collection.insert_one(entry)
+    # Broadcast to all connected clients
+    socketio.emit("audit_log_created", json_response(entry), broadcast=True)
     return entry
 
 
@@ -67,6 +69,8 @@ def require_auth(f):
     """Decorator to verify Firebase token (can be enhanced)."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # For now, just verify the email header is present
+        # In production, verify Firebase ID token
         email = request.headers.get("X-User-Email")
         if not email:
             return jsonify({"error": "Unauthorized"}), 401
@@ -108,6 +112,7 @@ def upsert_profile():
         if not email:
             return jsonify({"error": "email is required"}), 400
         
+        # Add timestamps
         if "_id" not in data:
             data["createdAt"] = datetime.utcnow().isoformat()
         data["updatedAt"] = datetime.utcnow().isoformat()
@@ -119,6 +124,7 @@ def upsert_profile():
             return_document=True,
         )
         
+        # Log audit
         actor = request.headers.get("X-User-Email", "system")
         log_audit(actor, "profile_updated", email, {"profile": data})
         
@@ -180,6 +186,9 @@ def create_session():
         actor = request.headers.get("X-User-Email", data.get("email", "system"))
         log_audit(actor, "session_created", str(result.inserted_id), {"session": data})
         
+        # Broadcast to admin
+        socketio.emit("session_created", json_response(session), broadcast=True)
+        
         return jsonify(json_response(session)), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -216,6 +225,9 @@ def update_session(session_id):
         actor = request.headers.get("X-User-Email", "system")
         log_audit(actor, "session_updated", session_id, {"updates": data})
         
+        # Broadcast update
+        socketio.emit("session_updated", json_response(result), broadcast=True)
+        
         return jsonify(json_response(result)), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -248,6 +260,8 @@ def add_break(session_id):
         actor = request.headers.get("X-User-Email", "system")
         log_audit(actor, "break_added", session_id, {"break": break_entry})
         
+        socketio.emit("break_added", json_response(result), broadcast=True)
+        
         return jsonify(json_response(result)), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -278,6 +292,8 @@ def add_location(session_id):
         if not result:
             return jsonify({"error": "Session not found"}), 404
         
+        socketio.emit("location_added", json_response(result), broadcast=True)
+        
         return jsonify(json_response(result)), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -306,9 +322,80 @@ def create_audit_log():
         result = audit_collection.insert_one(data)
         log_entry = audit_collection.find_one({"_id": result.inserted_id})
         
+        socketio.emit("audit_log_created", json_response(log_entry), broadcast=True)
+        
         return jsonify(json_response(log_entry)), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ============ FILE UPLOAD (Google Drive) ============
+
+@app.post("/api/upload")
+def upload_file():
+    """Upload a file to Google Drive."""
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+        
+        # For Google Drive upload using Apps Script
+        # You would need to implement this based on your Apps Script deployment
+        # For now, return a mock response
+        
+        file_data = {
+            "name": file.filename,
+            "size": len(file.read()),
+            "url": f"https://drive.google.com/file/d/mock-{ObjectId()}/view",
+            "id": f"mock-{ObjectId()}",
+            "uploadedAt": datetime.utcnow().isoformat(),
+            "uploadedBy": request.headers.get("X-User-Email", "unknown"),
+        }
+        
+        return jsonify(file_data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============ REAL-TIME WEBSOCKET ENDPOINTS ============
+
+@socketio.on("connect")
+def handle_connect():
+    """Handle client connection."""
+    user_email = request.args.get("email", "anonymous")
+    join_room(f"user_{user_email}")
+    emit("connect_response", {"status": "connected", "email": user_email})
+    print(f"Client connected: {user_email}")
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    """Handle client disconnection."""
+    print("Client disconnected")
+
+
+@socketio.on("join_admin_room")
+def handle_join_admin():
+    """Admin joins the admin broadcast room."""
+    user_email = request.args.get("email", "admin")
+    join_room("admin_room")
+    emit("admin_joined", {"email": user_email})
+    print(f"Admin joined: {user_email}")
+
+
+@socketio.on("session_update")
+def handle_session_update(data):
+    """Broadcast real-time session update."""
+    emit("session_real_time_update", data, broadcast=True)
+
+
+@socketio.on("profile_update")
+def handle_profile_update(data):
+    """Broadcast real-time profile update."""
+    emit("profile_real_time_update", data, broadcast=True)
 
 
 # ============ HEALTH CHECK ============
@@ -317,6 +404,7 @@ def create_audit_log():
 def health_check():
     """Health check endpoint."""
     try:
+        # Check MongoDB connection
         db.command("ping")
         return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()}), 200
     except Exception as e:
@@ -329,7 +417,6 @@ def index():
     return jsonify({
         "name": "Sinhas Track - Backend API",
         "version": "1.0.0",
-        "status": "running",
         "endpoints": {
             "profiles": "/api/profiles",
             "sessions": "/api/sessions",
@@ -354,4 +441,4 @@ def server_error(e):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     debug = os.getenv("FLASK_ENV", "production") == "development"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    socketio.run(app, host="0.0.0.0", port=port, debug=debug, allow_unsafe_werkzeug=True)
