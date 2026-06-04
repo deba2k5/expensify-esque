@@ -13,9 +13,11 @@
     }
   ],
   "env": {
-    "MONGODB_URI": "@mongodb_uri",
-    "GOOGLE_DRIVE_FOLDER_ID": "@google_drive_folder_id",
+    "MONGODB_URI": "mongodb+srv://sinhasapp:<db_password>@sinhasapp.mhknlyr.mongodb.net/?appName=sinhasapp",
+    "GOOGLE_DRIVE_FOLDER_ID": "1i5eJ2S3LVEsnEYI8gpljk-E0eoq6rCSb",
     "FLASK_ENV": "production",
-    "ADMIN_EMAILS": "@admin_emails"
+    "ADMIN_EMAILS": "admin@sinhas.ch,manager@sinhas.ch",
+    "SECRET_KEY": "sinhas-workforce-vision-secret-key-2026",
+    "CORS_ORIGINS": "https://sinhas-frontend.vercel.app,http://localhost:3000"
   }
 }
