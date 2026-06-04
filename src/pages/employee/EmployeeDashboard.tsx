@@ -1,0 +1,398 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { api, fmtDuration, haversine } from "@/lib/api";
+import type { BreakEntry, WorkSession, WorkType } from "@/lib/types";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import FileUploader, { UploadedFile } from "@/components/FileUploader";
+import LiveMap from "@/components/LiveMap";
+import { Clock, Coffee, MapPin, Play, Square, FileBarChart, Send } from "lucide-react";
+import { toast } from "sonner";
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid } from "recharts";
+
+const WORK_TYPES: { value: WorkType; label: string }[] = [
+  { value: "on_site", label: "On-site" },
+  { value: "remote", label: "Remote work" },
+  { value: "work_from_home", label: "Work from home" },
+  { value: "office_administration", label: "Office administration" },
+  { value: "client_meeting", label: "Client meeting" },
+  { value: "training", label: "Training" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "other", label: "Other" },
+];
+
+const BREAK_TYPES: { value: BreakEntry["type"]; label: string }[] = [
+  { value: "lunch", label: "Lunch break" },
+  { value: "short", label: "Short break" },
+  { value: "prayer", label: "Prayer break" },
+  { value: "other", label: "Other" },
+];
+
+const GEOFENCE_RADIUS = 100; // meters
+
+export default function EmployeeDashboard() {
+  const { profile, user } = useAuth();
+  const [session, setSession] = useState<WorkSession | null>(null);
+  const [tick, setTick] = useState(0);
+  const [history, setHistory] = useState<WorkSession[]>([]);
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
+  const [description, setDescription] = useState("");
+  const [breakType, setBreakType] = useState<BreakEntry["type"]>("short");
+  const baseLocation = useRef<{ lat: number; lng: number } | null>(null);
+
+  // Load current and past sessions
+  useEffect(() => {
+    if (!user?.email) return;
+    (async () => {
+      const all = await api.listSessions({ email: user.email! });
+      const active = all.find((s) => !s.clockOut) || null;
+      setSession(active);
+      setHistory(all);
+      if (active) {
+        setAttachments(active.attachments);
+        setDescription(active.description || "");
+      }
+    })();
+  }, [user]);
+
+  // Heartbeat for elapsed counter
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const onBreak = useMemo(() => session?.breaks.some((b) => !b.end), [session]);
+
+  // Location tracking every 30 minutes (and immediately at clock-in), paused on breaks
+  useEffect(() => {
+    if (!session || session.clockOut) return;
+    const pushPing = () => {
+      if (onBreak) return;
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const ping = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            at: new Date().toISOString(),
+          };
+          if (ping.accuracy > 100) return; // require ≤100m accuracy
+          if (!baseLocation.current) baseLocation.current = { lat: ping.lat, lng: ping.lng };
+          const dist = haversine(baseLocation.current, ping);
+          const outside = dist > GEOFENCE_RADIUS;
+          const updated = await api.pushLocation(session.id, { ...ping, outsideGeofence: outside });
+          setSession(updated);
+          if (outside) {
+            await api.log({
+              actor: user!.email!,
+              action: "geofence.exit",
+              target: session.id,
+              meta: { distance: Math.round(dist) },
+            });
+            toast.warning(`Outside 100m geofence (${Math.round(dist)}m). Admin notified.`);
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    };
+    pushPing();
+    const id = setInterval(pushPing, 30 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [session, onBreak, user]);
+
+  const refreshHistory = async () => {
+    if (!user?.email) return;
+    setHistory(await api.listSessions({ email: user.email }));
+  };
+
+  // ---- Actions ----
+  const clockIn = async () => {
+    if (!profile) return;
+    const s = await api.clockIn(profile);
+    setSession(s);
+    setAttachments([]);
+    setDescription("");
+    baseLocation.current = null;
+    await api.log({ actor: profile.email, action: "session.clock_in", target: s.id });
+    toast.success("Clocked in");
+    refreshHistory();
+  };
+
+  const clockOut = async () => {
+    if (!session) return;
+    const s = await api.clockOut(session.id);
+    setSession(s);
+    await api.log({ actor: user!.email!, action: "session.clock_out", target: s.id });
+    toast.success("Clocked out");
+    refreshHistory();
+  };
+
+  const startBreak = async () => {
+    if (!session) return;
+    const s = await api.addBreak(session.id, breakType);
+    setSession(s);
+    toast(`${breakType} break started`);
+  };
+
+  const endBreak = async () => {
+    if (!session) return;
+    const open = session.breaks.find((b) => !b.end);
+    if (!open) return;
+    const s = await api.endBreak(session.id, open.id);
+    setSession(s);
+    toast("Break ended");
+  };
+
+  const setWorkType = async (wt: WorkType) => {
+    if (!session) return;
+    const s = await api.setWorkType(session.id, wt);
+    setSession(s);
+    toast(`Work type: ${wt.replaceAll("_", " ")} (pending approval)`);
+  };
+
+  const submitReport = async () => {
+    if (!session) return;
+    if (!description.trim()) return toast.error("Add a short description");
+    const s = await api.submitReport(session.id, description, attachments);
+    setSession(s);
+    toast.success("Report submitted for admin review");
+    refreshHistory();
+  };
+
+  // ---- Live calculations ----
+  const elapsedWork = (() => {
+    if (!session) return 0;
+    const end = session.clockOut ? new Date(session.clockOut).getTime() : Date.now();
+    return end - new Date(session.clockIn).getTime();
+  })();
+  const elapsedBreak = (() => {
+    if (!session) return 0;
+    return session.breaks.reduce((sum, b) => {
+      const end = b.end ? new Date(b.end).getTime() : Date.now();
+      return sum + (end - new Date(b.start).getTime());
+    }, 0);
+  })();
+
+  // chart data — last 7 days
+  const chartData = useMemo(() => {
+    const days: { date: string; hours: number; breakH: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const day = history.filter((h) => h.date === key);
+      const work = day.reduce((s, x) => s + (x.totalWorkMs || 0), 0) / 3600000;
+      const br = day.reduce((s, x) => s + (x.totalBreakMs || 0), 0) / 3600000;
+      days.push({ date: key.slice(5), hours: +work.toFixed(2), breakH: +br.toFixed(2) });
+    }
+    return days;
+  }, [history]);
+
+  const points = (session?.locations || []).map((l, i) => ({
+    id: String(i), lat: l.lat, lng: l.lng, label: new Date(l.at).toLocaleTimeString(),
+    accent: l.outsideGeofence,
+  }));
+
+  // unused but referenced in JSX
+  void tick;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Hello, {profile?.fullName?.split(" ")[0] || "there"}</h1>
+          <p className="text-sm text-muted-foreground">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {session && !session.clockOut ? (
+            <Badge className="bg-success text-success-foreground">Working</Badge>
+          ) : (
+            <Badge variant="secondary">Off-clock</Badge>
+          )}
+          {onBreak && <Badge className="bg-warning text-warning-foreground">On break</Badge>}
+        </div>
+      </header>
+
+      {/* Top metric cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Stat icon={Clock} label="Today work time" value={fmtDuration(elapsedWork - elapsedBreak)} />
+        <Stat icon={Coffee} label="Break time" value={fmtDuration(elapsedBreak)} />
+        <Stat icon={MapPin} label="Location pings" value={String(session?.locations.length ?? 0)} />
+        <Stat icon={FileBarChart} label="Sessions (all-time)" value={String(history.length)} />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        <Card className="p-6 lg:col-span-2 space-y-5">
+          <div className="flex flex-wrap items-center gap-3">
+            {!session || session.clockOut ? (
+              <Button onClick={clockIn} size="lg" className="gap-2">
+                <Play className="h-4 w-4" /> Clock in
+              </Button>
+            ) : (
+              <Button onClick={clockOut} size="lg" variant="destructive" className="gap-2">
+                <Square className="h-4 w-4" /> Clock out
+              </Button>
+            )}
+            {session && !session.clockOut && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Select value={breakType} onValueChange={(v) => setBreakType(v as BreakEntry["type"])}>
+                    <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BREAK_TYPES.map((b) => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {onBreak ? (
+                    <Button variant="outline" onClick={endBreak}>End break</Button>
+                  ) : (
+                    <Button variant="outline" onClick={startBreak} className="gap-2">
+                      <Coffee className="h-4 w-4" /> Start break
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Work type</span>
+                  <Select value={session.workType || ""} onValueChange={(v) => setWorkType(v as WorkType)}>
+                    <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select…" /></SelectTrigger>
+                    <SelectContent>
+                      {WORK_TYPES.map((w) => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+          </div>
+
+          {session && (
+            <div className="rounded-lg border p-4 bg-secondary/40 text-sm space-y-1">
+              <div><span className="text-muted-foreground">Clock-in:</span> {new Date(session.clockIn).toLocaleString()}</div>
+              {session.clockOut && (
+                <div><span className="text-muted-foreground">Clock-out:</span> {new Date(session.clockOut).toLocaleString()}</div>
+              )}
+              <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={session.status} /></div>
+              {session.adminComment && (
+                <div><span className="text-muted-foreground">Admin comment:</span> {session.adminComment}</div>
+              )}
+              {session.breaks.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-muted-foreground">Breaks ({session.breaks.length})</summary>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {session.breaks.map((b) => (
+                      <li key={b.id} className="flex gap-2">
+                        <Badge variant="outline">{b.type}</Badge>
+                        <span>{new Date(b.start).toLocaleTimeString()}</span>
+                        <span>→</span>
+                        <span>{b.end ? new Date(b.end).toLocaleTimeString() : "…"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Daily report */}
+          {session && (
+            <div className="space-y-3">
+              <h3 className="font-medium">Daily report</h3>
+              <Textarea
+                placeholder="Describe what you accomplished today…"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                maxLength={2000}
+              />
+              <FileUploader value={attachments} onChange={setAttachments} />
+              <Button onClick={submitReport} className="gap-2">
+                <Send className="h-4 w-4" /> Submit for admin review
+              </Button>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium">Live location</h3>
+            <span className="text-xs text-muted-foreground">100m geofence</span>
+          </div>
+          {session && points.length ? (
+            <LiveMap
+              points={points}
+              center={baseLocation.current ? [baseLocation.current.lat, baseLocation.current.lng] : undefined}
+              geofenceRadius={GEOFENCE_RADIUS}
+              height={320}
+            />
+          ) : (
+            <div className="h-[320px] grid place-items-center text-sm text-muted-foreground rounded-md bg-secondary/40">
+              {session ? "Acquiring GPS…" : "Clock in to start location tracking"}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Charts */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card className="p-5">
+          <h3 className="font-medium mb-4">Hours worked — last 7 days</h3>
+          <div className="h-[220px]">
+            <ResponsiveContainer>
+              <LineChart data={chartData}>
+                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <Tooltip />
+                <Line type="monotone" dataKey="hours" stroke="hsl(var(--primary))" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+        <Card className="p-5">
+          <h3 className="font-medium mb-4">Break hours — last 7 days</h3>
+          <div className="h-[220px]">
+            <ResponsiveContainer>
+              <BarChart data={chartData}>
+                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <Tooltip />
+                <Bar dataKey="breakH" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-3">
+        <div className="h-9 w-9 rounded-md bg-primary/10 text-primary grid place-items-center">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="text-lg font-semibold">{value}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function StatusBadge({ status }: { status: WorkSession["status"] }) {
+  const map: Record<string, string> = {
+    pending: "bg-warning text-warning-foreground",
+    approved: "bg-success text-success-foreground",
+    rejected: "bg-destructive text-destructive-foreground",
+  };
+  return <Badge className={map[status]}>{status}</Badge>;
+}
