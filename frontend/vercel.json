@@ -3,9 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
-    "VITE_MONGODB_API_URL": "@vite_mongodb_api_url",
-    "VITE_WS_URL": "@vite_ws_url",
-    "VITE_GOOGLE_DRIVE_UPLOAD_URL": "@vite_google_drive_upload_url",
-    "VITE_ADMIN_EMAILS": "@vite_admin_emails"
+    "VITE_MONGODB_API_URL": "https://sinhas-backend.vercel.app/api",
+    "VITE_WS_URL": "https://sinhas-backend.vercel.app",
+    "VITE_GOOGLE_DRIVE_UPLOAD_URL": "https://drive.google.com/drive/folders/1i5eJ2S3LVEsnEYI8gpljk-E0eoq6rCSb",
+    "VITE_ADMIN_EMAILS": "admin@sinhas.ch,manager@sinhas.ch"
   }
 }
