@@ -152,7 +152,7 @@ export default function EmployeeDashboard() {
     if (!session) return;
     const s = await api.setWorkType(session.id, wt);
     setSession(s);
-    toast(`Work type: ${wt.replaceAll("_", " ")} (pending approval)`);
+    toast(`Work type: ${wt.split("_").join(" ")} (pending approval)`);
   };
 
   const submitReport = async () => {

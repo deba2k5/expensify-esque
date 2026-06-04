@@ -45,7 +45,7 @@ export default function EmployeeReports() {
                 <TableCell>{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—"}</TableCell>
                 <TableCell>{fmtDuration((s.totalWorkMs || 0) - (s.totalBreakMs || 0))}</TableCell>
                 <TableCell>{fmtDuration(s.totalBreakMs)}</TableCell>
-                <TableCell className="capitalize">{s.workType?.replaceAll("_", " ") || "—"}</TableCell>
+                <TableCell className="capitalize">{s.workType?.split("_").join(" ") || "—"}</TableCell>
                 <TableCell><Badge className={statusColor[s.status]}>{s.status}</Badge></TableCell>
                 <TableCell className="text-xs">{s.adminComment || "—"}</TableCell>
               </TableRow>
