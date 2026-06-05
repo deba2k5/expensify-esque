@@ -21,7 +21,20 @@ export type WorkType =
   | "client_meeting"
   | "training"
   | "maintenance"
+  | "travel"
   | "other";
+
+export interface TravelLog {
+  id: string;
+  destination: string;
+  startedAt: string;
+  endedAt?: string;
+  startLat?: number;
+  startLng?: number;
+  endLat?: number;
+  endLng?: number;
+  distanceMeters?: number;
+}
 
 export type BreakType = "lunch" | "short" | "prayer" | "other";
 
