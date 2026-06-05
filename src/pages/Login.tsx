@@ -52,9 +52,9 @@ export default function Login() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" /> Live workforce intelligence
           </div>
-          <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight">
-            Real-time tracking,<br/>
-            <span className="text-white/70">Swiss-precise.</span>
+          <h1 className="text-4xl xl:text-5xl font-semibold leading-[1.05] tracking-tight">
+            Employee Work Hours<br/>
+            <span className="text-white/70">& Activity Tracking System</span>
           </h1>
           <p className="text-white/80 text-base leading-relaxed">
             Clock in, manage breaks, capture location, and submit daily reports.
