@@ -9,7 +9,7 @@ export default function AdminLiveMap() {
   useEffect(() => {
     const load = async () => setSessions(await api.listSessions());
     load();
-    const t = setInterval(load, 60000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
   const active = sessions.filter((s) => !s.clockOut);
@@ -17,18 +17,26 @@ export default function AdminLiveMap() {
     .map((s) => {
       const last = s.locations[s.locations.length - 1];
       if (!last) return null;
-      return { id: s.id, lat: last.lat, lng: last.lng, label: `${s.fullName} · ${new Date(last.at).toLocaleTimeString()}` };
+      const travelling = s.travels?.some((t) => !t.endedAt);
+      const dest = s.travels?.find((t) => !t.endedAt)?.destination;
+      return {
+        id: s.id,
+        lat: last.lat,
+        lng: last.lng,
+        label: `${s.fullName}${travelling ? ` ✈ ${dest}` : ""} · ${new Date(last.at).toLocaleTimeString()}`,
+        accent: travelling,
+      };
     })
-    .filter(Boolean) as { id: string; lat: number; lng: number; label: string }[];
+    .filter(Boolean) as { id: string; lat: number; lng: number; label: string; accent?: boolean }[];
 
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold">Live employee map</h1>
-        <p className="text-sm text-muted-foreground">{points.length} employee(s) reporting location.</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Live employee map</h1>
+        <p className="text-sm text-muted-foreground">{points.length} employee(s) reporting location · refreshes every 15s.</p>
       </header>
-      <Card className="p-3">
-        <div className="h-[560px]"><LiveMap points={points} /></div>
+      <Card className="p-3 shadow-card">
+        <div className="h-[460px] sm:h-[560px]"><LiveMap points={points} /></div>
       </Card>
     </div>
   );

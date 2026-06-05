@@ -158,6 +158,23 @@ export const api = {
     return this.updateSession(id, { workType });
   },
 
+  async startTravel(id: string, destination: string, startLat?: number, startLng?: number) {
+    const s = (await this.listSessions()).find((x) => x.id === id)!;
+    const travels = s.travels || [];
+    const t = { id: uid(), destination, startedAt: new Date().toISOString(), startLat, startLng };
+    return this.updateSession(id, { travels: [...travels, t], workType: "travel" });
+  },
+
+  async endTravel(id: string, travelId: string, endLat?: number, endLng?: number, distanceMeters?: number) {
+    const s = (await this.listSessions()).find((x) => x.id === id)!;
+    const travels = (s.travels || []).map((t) =>
+      t.id === travelId && !t.endedAt
+        ? { ...t, endedAt: new Date().toISOString(), endLat, endLng, distanceMeters }
+        : t
+    );
+    return this.updateSession(id, { travels });
+  },
+
   async clockOut(id: string): Promise<WorkSession> {
     return this.updateSession(id, { clockOut: new Date().toISOString() });
   },
