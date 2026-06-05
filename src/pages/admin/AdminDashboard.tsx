@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmtDuration } from "@/lib/api";
 import type { EmployeeProfile, WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, AlertTriangle, CheckSquare } from "lucide-react";
+import { Users, Clock, AlertTriangle, CheckSquare, Plane, Coffee, PowerOff, BellRing } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { toast } from "sonner";
+
+const FORGOT_LOGOUT_HOURS = 12;
+
+type LiveStatus = "working" | "travelling" | "break" | "offline";
 
 export default function AdminDashboard() {
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [sessions, setSessions] = useState<WorkSession[]>([]);
+  const notifiedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const load = async () => {
@@ -17,15 +23,62 @@ export default function AdminDashboard() {
       setSessions(await api.listSessions());
     };
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
 
-  const activeNow = sessions.filter((s) => !s.clockOut);
+  const activeSessions = sessions.filter((s) => !s.clockOut);
   const pending = sessions.filter((s) => s.status === "pending" && s.clockOut);
   const geofenceAlerts = sessions.flatMap((s) =>
     s.locations.filter((l) => l.outsideGeofence).map(() => s.email)
   );
+
+  const statusFor = (s: WorkSession): LiveStatus => {
+    if (s.travels?.some((t) => !t.endedAt)) return "travelling";
+    if (s.breaks.some((b) => !b.end)) return "break";
+    return "working";
+  };
+
+  const liveByEmployee = useMemo(() => {
+    const map = new Map<string, { profile: EmployeeProfile; status: LiveStatus; session?: WorkSession }>();
+    profiles.forEach((p) => map.set(p.email, { profile: p, status: "offline" }));
+    activeSessions.forEach((s) => {
+      const p = profiles.find((x) => x.email === s.email);
+      if (p) map.set(s.email, { profile: p, status: statusFor(s), session: s });
+    });
+    return Array.from(map.values());
+  }, [profiles, activeSessions]);
+
+  const counts = useMemo(() => {
+    const c = { working: 0, travelling: 0, break: 0, offline: 0 };
+    liveByEmployee.forEach((e) => { c[e.status]++; });
+    return c;
+  }, [liveByEmployee]);
+
+  // Forgot-logout: sessions still open beyond threshold
+  const forgotLogout = useMemo(
+    () => activeSessions.filter(
+      (s) => Date.now() - new Date(s.clockIn).getTime() > FORGOT_LOGOUT_HOURS * 3600 * 1000
+    ),
+    [activeSessions]
+  );
+
+  useEffect(() => {
+    forgotLogout.forEach(async (s) => {
+      if (notifiedRef.current.has(s.id)) return;
+      notifiedRef.current.add(s.id);
+      toast.warning(`${s.fullName} forgot to clock out`, {
+        description: `Clocked in ${fmtDuration(Date.now() - new Date(s.clockIn).getTime())} ago`,
+        duration: 8000,
+      });
+      await api.log({
+        actor: "system",
+        action: "alert.forgot_logout",
+        target: s.id,
+        meta: { email: s.email, since: s.clockIn },
+      });
+    });
+  }, [forgotLogout]);
 
   const workTypeData = useMemo(() => {
     const map = new Map<string, number>();
@@ -47,19 +100,44 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Admin overview</h1>
-        <p className="text-sm text-muted-foreground">Live activity across your workforce.</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Admin overview</h1>
+        <p className="text-sm text-muted-foreground">Real-time workforce activity across Sinha's Group.</p>
       </header>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {forgotLogout.length > 0 && (
+        <Card className="p-4 border-warning/40 bg-warning/5">
+          <div className="flex items-start gap-3">
+            <BellRing className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-medium text-sm">{forgotLogout.length} employee(s) may have forgotten to clock out</div>
+              <ul className="mt-1 text-xs text-muted-foreground space-y-0.5">
+                {forgotLogout.slice(0, 5).map((s) => (
+                  <li key={s.id}>
+                    {s.fullName} — open for {fmtDuration(Date.now() - new Date(s.clockIn).getTime())}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Stat icon={Users} label="Total employees" value={String(profiles.length)} />
-        <Stat icon={Clock} label="Active now" value={String(activeNow.length)} accent />
+        <Stat icon={Clock} label="Working now" value={String(counts.working)} tone="success" />
+        <Stat icon={Plane} label="Travelling" value={String(counts.travelling)} tone="info" />
+        <Stat icon={Coffee} label="On break" value={String(counts.break)} tone="warning" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Stat icon={PowerOff} label="Offline" value={String(counts.offline)} />
         <Stat icon={CheckSquare} label="Pending reports" value={String(pending.length)} />
-        <Stat icon={AlertTriangle} label="Geofence alerts" value={String(geofenceAlerts.length)} />
+        <Stat icon={AlertTriangle} label="Geofence alerts" value={String(geofenceAlerts.length)} tone="destructive" />
+        <Stat icon={BellRing} label="Forgot logout" value={String(forgotLogout.length)} tone="warning" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <Card className="p-5 lg:col-span-2">
+        <Card className="p-5 lg:col-span-2 shadow-card">
           <h3 className="font-medium mb-4">Hours per employee (all time)</h3>
           <div className="h-[260px]">
             <ResponsiveContainer>
@@ -73,7 +151,7 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card className="p-5">
+        <Card className="p-5 shadow-card">
           <h3 className="font-medium mb-4">Work type distribution</h3>
           <div className="h-[260px]">
             <ResponsiveContainer>
@@ -89,45 +167,75 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium">Currently working</h3>
+      <Card className="p-5 shadow-card">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-medium">Live workforce status</h3>
           <Link to="/admin/map" className="text-sm text-primary hover:underline">View live map →</Link>
         </div>
-        <div className="space-y-2">
-          {activeNow.length === 0 && (
-            <p className="text-sm text-muted-foreground">No one is clocked in right now.</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {liveByEmployee.length === 0 && (
+            <p className="text-sm text-muted-foreground">No employees yet.</p>
           )}
-          {activeNow.map((s) => (
-            <div key={s.id} className="flex items-center justify-between border rounded-md p-3">
-              <div>
-                <div className="font-medium">{s.fullName}</div>
-                <div className="text-xs text-muted-foreground">{s.email}</div>
+          {liveByEmployee.map((e) => {
+            const active = e.session?.travels?.find((t) => !t.endedAt);
+            return (
+              <div key={e.profile.email} className="flex items-center justify-between border rounded-lg p-3 bg-card">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">{e.profile.fullName}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">{e.profile.email}</div>
+                  {active && (
+                    <div className="text-[11px] text-info mt-0.5 truncate">→ {active.destination}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs shrink-0">
+                  <StatusPill status={e.status} />
+                  {e.session && (
+                    <span className="text-muted-foreground hidden sm:inline">
+                      {fmtDuration(Date.now() - new Date(e.session.clockIn).getTime())}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-xs">
-                <Badge variant="outline">{s.workType?.split("_").join(" ") || "Unspecified"}</Badge>
-                <span>Since {new Date(s.clockIn).toLocaleTimeString()}</span>
-                <span className="text-muted-foreground">
-                  {fmtDuration(Date.now() - new Date(s.clockIn).getTime())}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>
   );
 }
 
-function Stat({ icon: Icon, label, value, accent }: { icon: React.ElementType; label: string; value: string; accent?: boolean }) {
+function StatusPill({ status }: { status: LiveStatus }) {
+  const map: Record<LiveStatus, { c: string; l: string }> = {
+    working: { c: "bg-success text-success-foreground", l: "Working" },
+    travelling: { c: "bg-info text-info-foreground", l: "Travelling" },
+    break: { c: "bg-warning text-warning-foreground", l: "On break" },
+    offline: { c: "bg-muted text-muted-foreground", l: "Offline" },
+  };
+  const { c, l } = map[status];
+  return <Badge className={c}>{l}</Badge>;
+}
+
+function Stat({
+  icon: Icon, label, value, tone,
+}: {
+  icon: React.ElementType; label: string; value: string;
+  tone?: "success" | "info" | "warning" | "destructive";
+}) {
+  const toneMap: Record<string, string> = {
+    success: "bg-success/10 text-success",
+    info: "bg-info/10 text-info",
+    warning: "bg-warning/10 text-warning",
+    destructive: "bg-destructive/10 text-destructive",
+  };
+  const cls = tone ? toneMap[tone] : "bg-primary/10 text-primary";
   return (
-    <Card className="p-4">
+    <Card className="p-4 shadow-card">
       <div className="flex items-center gap-3">
-        <div className={`h-9 w-9 rounded-md grid place-items-center ${accent ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}>
+        <div className={`h-9 w-9 rounded-md grid place-items-center ${cls}`}>
           <Icon className="h-4 w-4" />
         </div>
-        <div>
-          <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="min-w-0">
+          <div className="text-[11px] text-muted-foreground truncate">{label}</div>
           <div className="text-lg font-semibold">{value}</div>
         </div>
       </div>
