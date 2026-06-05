@@ -74,6 +74,7 @@ export interface WorkSession {
   adminComment?: string;
   reviewedBy?: string;
   reviewedAt?: string;
+  travels?: TravelLog[];
 }
 
 export interface AuditLog {
