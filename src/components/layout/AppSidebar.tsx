@@ -13,10 +13,12 @@ import {
   PieChart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/sinhas-logo.asset.json";
 
 const linkBase =
-  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors";
-const linkActive = "bg-primary/10 text-primary";
+  "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all";
+const linkActive =
+  "bg-gradient-primary text-primary-foreground shadow-elevated hover:text-primary-foreground hover:bg-gradient-primary";
 
 export default function AppSidebar() {
   const { role, profile, signOut, user } = useAuth();
@@ -38,20 +40,34 @@ export default function AppSidebar() {
         { to: "/profile", label: "Profile", icon: User },
       ];
 
+  const initials = (profile?.fullName || user?.email || "?")
+    .split(/[\s@]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("");
+
   return (
-    <aside className="w-60 shrink-0 border-r bg-sidebar flex flex-col">
-      <div className="h-16 flex items-center px-5 border-b">
-        <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold mr-3">
-          +
-        </div>
-        <div>
-          <div className="text-sm font-semibold leading-tight">Sinhas Track</div>
+    <aside className="w-64 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col">
+      <div className="h-20 flex items-center gap-3 px-5 border-b border-sidebar-border">
+        <img
+          src={logoAsset.url}
+          alt="Sinha's Group"
+          className="h-11 w-11 rounded-lg object-contain bg-white ring-1 ring-sidebar-border p-0.5"
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold leading-tight truncate">Sinha's Group</div>
           <div className="text-[11px] text-muted-foreground">
-            {isAdmin ? "Admin Console" : "Employee Portal"}
+            {isAdmin ? "Admin Console" : "Workforce Portal"}
           </div>
         </div>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+
+      <div className="px-4 pt-4 pb-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+        {isAdmin ? "Manage" : "Workspace"}
+      </div>
+
+      <nav className="flex-1 px-3 pb-3 space-y-1">
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -59,13 +75,22 @@ export default function AppSidebar() {
             end={it.end}
             className={({ isActive }) => `${linkBase} ${isActive ? linkActive : ""}`}
           >
-            <it.icon className="h-4 w-4" /> {it.label}
+            <it.icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{it.label}</span>
           </NavLink>
         ))}
       </nav>
-      <div className="border-t p-3 text-xs">
-        <div className="font-medium truncate">{profile?.fullName || user?.email}</div>
-        <div className="text-muted-foreground truncate">{user?.email}</div>
+
+      <div className="border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/60">
+          <div className="h-9 w-9 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-xs font-semibold shrink-0">
+            {initials || "U"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold truncate">{profile?.fullName || user?.email}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{user?.email}</div>
+          </div>
+        </div>
         <Button
           onClick={async () => {
             await signOut();
@@ -73,7 +98,7 @@ export default function AppSidebar() {
           }}
           variant="ghost"
           size="sm"
-          className="mt-2 w-full justify-start text-muted-foreground"
+          className="mt-2 w-full justify-start text-muted-foreground hover:text-foreground"
         >
           <LogOut className="h-4 w-4 mr-2" /> Sign out
         </Button>
