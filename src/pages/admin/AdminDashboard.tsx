@@ -272,7 +272,7 @@ function Stat({
   };
   const cls = tone ? toneMap[tone] : "bg-primary/10 text-primary";
   return (
-    <Card className="p-4 shadow-card">
+    <Card className="p-4 shadow-card hover-lift border-border/70">
       <div className="flex items-center gap-3">
         <div className={`h-9 w-9 rounded-md grid place-items-center ${cls}`}>
           <Icon className="h-4 w-4" />
