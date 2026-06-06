@@ -1,4 +1,19 @@
 import { API_BASE, USE_MOCK_API } from "./config";
+import { db } from "./firebase";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import type {
   AuditLog,
   BreakEntry,
@@ -10,25 +25,13 @@ import type {
 } from "./types";
 
 /**
- * Thin client that hits a MongoDB-backed REST API. If VITE_MONGODB_API_URL
- * isn't set, we fall back to a localStorage mock so the UI is still usable.
- * See BACKEND.md for the exact endpoint contract.
+ * Data layer.
+ *   - If VITE_MONGODB_API_URL is set → talk to your REST API (see BACKEND.md).
+ *   - Otherwise → use Firestore (shared across all devices/users).
+ *     This means multiple employees and admins can be signed in at the same
+ *     time on different browsers/devices and see the same live workforce data.
  */
 
-const LS = {
-  profiles: "ets.profiles",
-  sessions: "ets.sessions",
-  audit: "ets.audit",
-};
-
-const read = <T>(k: string): T[] => {
-  try {
-    return JSON.parse(localStorage.getItem(k) || "[]");
-  } catch {
-    return [];
-  }
-};
-const write = <T>(k: string, v: T[]) => localStorage.setItem(k, JSON.stringify(v));
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -41,12 +44,65 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ---------- Firestore helpers ----------
+const PROFILES = "profiles";
+const SESSIONS = "sessions";
+const AUDIT = "audit";
+
+const emailKey = (e: string) => e.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+async function fsListProfiles(): Promise<EmployeeProfile[]> {
+  const snap = await getDocs(collection(db, PROFILES));
+  return snap.docs.map((d) => d.data() as EmployeeProfile);
+}
+async function fsGetProfile(email: string): Promise<EmployeeProfile | null> {
+  const ref = doc(db, PROFILES, emailKey(email));
+  const s = await getDoc(ref);
+  return s.exists() ? (s.data() as EmployeeProfile) : null;
+}
+async function fsUpsertProfile(p: EmployeeProfile): Promise<EmployeeProfile> {
+  await setDoc(doc(db, PROFILES, emailKey(p.email)), p, { merge: true });
+  return p;
+}
+
+async function fsListSessions(filter?: { email?: string; status?: Status }): Promise<WorkSession[]> {
+  const col = collection(db, SESSIONS);
+  // Avoid composite indexes — filter in-memory after a simple query.
+  let q;
+  if (filter?.email) q = query(col, where("email", "==", filter.email));
+  else q = query(col);
+  const snap = await getDocs(q);
+  let list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkSession, "id">) }));
+  if (filter?.status) list = list.filter((s) => s.status === filter.status);
+  return list.sort((a, b) => (b.clockIn || "").localeCompare(a.clockIn || ""));
+}
+
+async function fsCreateSession(s: WorkSession): Promise<WorkSession> {
+  await setDoc(doc(db, SESSIONS, s.id), s);
+  return s;
+}
+
+async function fsUpdateSession(id: string, patch: Partial<WorkSession>): Promise<WorkSession> {
+  const ref = doc(db, SESSIONS, id);
+  const cur = await getDoc(ref);
+  if (!cur.exists()) throw new Error("Session not found");
+  const merged: WorkSession = { ...(cur.data() as WorkSession), ...patch, id };
+  if (merged.clockOut) {
+    merged.totalWorkMs =
+      new Date(merged.clockOut).getTime() - new Date(merged.clockIn).getTime();
+  }
+  merged.totalBreakMs = (merged.breaks || []).reduce(
+    (sum, b) => sum + (b.end ? new Date(b.end).getTime() - new Date(b.start).getTime() : 0),
+    0
+  );
+  await setDoc(ref, merged);
+  return merged;
+}
+
 // ---------- PROFILES ----------
 export const api = {
   async getProfile(email: string): Promise<EmployeeProfile | null> {
-    if (USE_MOCK_API) {
-      return read<EmployeeProfile>(LS.profiles).find((p) => p.email === email) || null;
-    }
+    if (USE_MOCK_API) return fsGetProfile(email);
     try {
       return await request(`/profiles/${encodeURIComponent(email)}`);
     } catch {
@@ -55,30 +111,18 @@ export const api = {
   },
 
   async upsertProfile(p: EmployeeProfile): Promise<EmployeeProfile> {
-    if (USE_MOCK_API) {
-      const list = read<EmployeeProfile>(LS.profiles);
-      const i = list.findIndex((x) => x.email === p.email);
-      if (i >= 0) list[i] = p;
-      else list.push(p);
-      write(LS.profiles, list);
-      return p;
-    }
+    if (USE_MOCK_API) return fsUpsertProfile(p);
     return request(`/profiles`, { method: "POST", body: JSON.stringify(p) });
   },
 
   async listProfiles(): Promise<EmployeeProfile[]> {
-    if (USE_MOCK_API) return read<EmployeeProfile>(LS.profiles);
+    if (USE_MOCK_API) return fsListProfiles();
     return request(`/profiles`);
   },
 
   // ---------- SESSIONS ----------
   async listSessions(filter?: { email?: string; status?: Status }): Promise<WorkSession[]> {
-    if (USE_MOCK_API) {
-      let list = read<WorkSession>(LS.sessions);
-      if (filter?.email) list = list.filter((s) => s.email === filter.email);
-      if (filter?.status) list = list.filter((s) => s.status === filter.status);
-      return list.sort((a, b) => (b.clockIn || "").localeCompare(a.clockIn || ""));
-    }
+    if (USE_MOCK_API) return fsListSessions(filter);
     const qs = new URLSearchParams(filter as Record<string, string>).toString();
     return request(`/sessions${qs ? `?${qs}` : ""}`);
   },
@@ -101,34 +145,12 @@ export const api = {
       attachments: [],
       status: "pending",
     };
-    if (USE_MOCK_API) {
-      const list = read<WorkSession>(LS.sessions);
-      list.push(session);
-      write(LS.sessions, list);
-      return session;
-    }
+    if (USE_MOCK_API) return fsCreateSession(session);
     return request(`/sessions`, { method: "POST", body: JSON.stringify(session) });
   },
 
   async updateSession(id: string, patch: Partial<WorkSession>): Promise<WorkSession> {
-    if (USE_MOCK_API) {
-      const list = read<WorkSession>(LS.sessions);
-      const i = list.findIndex((s) => s.id === id);
-      if (i < 0) throw new Error("Session not found");
-      list[i] = { ...list[i], ...patch };
-      // recompute totals
-      const s = list[i];
-      if (s.clockOut) {
-        s.totalWorkMs =
-          new Date(s.clockOut).getTime() - new Date(s.clockIn).getTime();
-      }
-      s.totalBreakMs = s.breaks.reduce(
-        (sum, b) => sum + (b.end ? new Date(b.end).getTime() - new Date(b.start).getTime() : 0),
-        0
-      );
-      write(LS.sessions, list);
-      return s;
-    }
+    if (USE_MOCK_API) return fsUpdateSession(id, patch);
     return request(`/sessions/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -179,6 +201,21 @@ export const api = {
     return this.updateSession(id, { clockOut: new Date().toISOString() });
   },
 
+  /** Admin can force-clock-out an employee who forgot to log off. */
+  async forceClockOut(id: string, adminEmail: string, note?: string): Promise<WorkSession> {
+    const s = await this.updateSession(id, {
+      clockOut: new Date().toISOString(),
+      adminComment: note || `Force clocked-out by ${adminEmail}`,
+    });
+    await this.log({
+      actor: adminEmail,
+      action: "session.force_clock_out",
+      target: id,
+      meta: { email: s.email, note },
+    });
+    return s;
+  },
+
   async submitReport(id: string, description: string, attachments: WorkSession["attachments"]) {
     const s = await this.updateSession(id, { description, attachments, status: "pending" });
     await this.log({ actor: s.email, action: "report.submitted", target: id });
@@ -200,16 +237,17 @@ export const api = {
   async log(entry: Omit<AuditLog, "id" | "at">): Promise<AuditLog> {
     const log: AuditLog = { ...entry, id: uid(), at: new Date().toISOString() };
     if (USE_MOCK_API) {
-      const list = read<AuditLog>(LS.audit);
-      list.unshift(log);
-      write(LS.audit, list.slice(0, 500));
+      await addDoc(collection(db, AUDIT), { ...log, _ts: serverTimestamp() });
       return log;
     }
     return request(`/audit`, { method: "POST", body: JSON.stringify(log) });
   },
 
   async listAudit(): Promise<AuditLog[]> {
-    if (USE_MOCK_API) return read<AuditLog>(LS.audit);
+    if (USE_MOCK_API) {
+      const snap = await getDocs(query(collection(db, AUDIT), orderBy("at", "desc"), limit(500)));
+      return snap.docs.map((d) => d.data() as AuditLog);
+    }
     return request(`/audit`);
   },
 };
@@ -229,3 +267,6 @@ export const haversine = (a: { lat: number; lng: number }, b: { lat: number; lng
     Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 };
+
+// kept for unused-import safety
+void updateDoc;

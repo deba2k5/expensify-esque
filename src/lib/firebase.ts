@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCrLReSFkJjT97hsg9Ls6b2-r8AFdp0pxc",
@@ -13,3 +14,8 @@ const firebaseConfig = {
 
 export const firebaseApp = initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(firebaseApp);
+// Persist sessions per-browser so multiple devices/tabs can each sign in independently.
+setPersistence(firebaseAuth, browserLocalPersistence).catch(() => {});
+
+// Shared Firestore — every device reads/writes the same live data.
+export const db = getFirestore(firebaseApp);

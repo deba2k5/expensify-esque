@@ -1,30 +1,51 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmtDuration } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import type { EmployeeProfile, WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, AlertTriangle, CheckSquare, Plane, Coffee, PowerOff, BellRing } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Clock, AlertTriangle, CheckSquare, Plane, Coffee, PowerOff, BellRing, PowerCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { toast } from "sonner";
 
-const FORGOT_LOGOUT_HOURS = 12;
+const FORGOT_LOGOUT_HOURS = 10;
 
 type LiveStatus = "working" | "travelling" | "break" | "offline";
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [sessions, setSessions] = useState<WorkSession[]>([]);
+  const [forcingId, setForcingId] = useState<string | null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
 
+  const reload = async () => {
+    setProfiles(await api.listProfiles());
+    setSessions(await api.listSessions());
+  };
+
+  const handleForceClockOut = async (s: WorkSession) => {
+    if (!user?.email) return;
+    if (!confirm(`Clock out ${s.fullName} for the day?`)) return;
+    setForcingId(s.id);
+    try {
+      await api.forceClockOut(s.id, user.email, "Auto-closed by admin (forgot to log off)");
+      toast.success(`${s.fullName} clocked out`);
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to clock out");
+    } finally {
+      setForcingId(null);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setProfiles(await api.listProfiles());
-      setSessions(await api.listSessions());
-    };
-    load();
-    const t = setInterval(load, 15000);
+    reload();
+    const t = setInterval(reload, 15000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeSessions = sessions.filter((s) => !s.clockOut);
@@ -105,19 +126,41 @@ export default function AdminDashboard() {
       </header>
 
       {forgotLogout.length > 0 && (
-        <Card className="p-4 border-warning/40 bg-warning/5">
-          <div className="flex items-start gap-3">
-            <BellRing className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <div className="font-medium text-sm">{forgotLogout.length} employee(s) may have forgotten to clock out</div>
-              <ul className="mt-1 text-xs text-muted-foreground space-y-0.5">
-                {forgotLogout.slice(0, 5).map((s) => (
-                  <li key={s.id}>
-                    {s.fullName} — open for {fmtDuration(Date.now() - new Date(s.clockIn).getTime())}
-                  </li>
-                ))}
-              </ul>
+        <Card className="p-5 border-warning/40 bg-gradient-to-br from-warning/10 via-warning/5 to-transparent shadow-card">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="h-9 w-9 rounded-lg bg-warning/15 text-warning grid place-items-center shrink-0">
+              <BellRing className="h-4 w-4" />
             </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm">
+                {forgotLogout.length} employee{forgotLogout.length > 1 ? "s" : ""} forgot to clock out
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Sessions open longer than {FORGOT_LOGOUT_HOURS} hours. You can close them on their behalf.
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {forgotLogout.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{s.fullName}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {s.email} · open for {fmtDuration(Date.now() - new Date(s.clockIn).getTime())}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={forcingId === s.id}
+                  onClick={() => handleForceClockOut(s)}
+                  className="shrink-0"
+                >
+                  <PowerCircle className="h-4 w-4 mr-1.5" />
+                  {forcingId === s.id ? "Closing…" : "Force clock-out"}
+                </Button>
+              </div>
+            ))}
           </div>
         </Card>
       )}
@@ -229,7 +272,7 @@ function Stat({
   };
   const cls = tone ? toneMap[tone] : "bg-primary/10 text-primary";
   return (
-    <Card className="p-4 shadow-card">
+    <Card className="p-4 shadow-card hover-lift border-border/70">
       <div className="flex items-center gap-3">
         <div className={`h-9 w-9 rounded-md grid place-items-center ${cls}`}>
           <Icon className="h-4 w-4" />
