@@ -1,30 +1,51 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fmtDuration } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import type { EmployeeProfile, WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, AlertTriangle, CheckSquare, Plane, Coffee, PowerOff, BellRing } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Clock, AlertTriangle, CheckSquare, Plane, Coffee, PowerOff, BellRing, PowerCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { toast } from "sonner";
 
-const FORGOT_LOGOUT_HOURS = 12;
+const FORGOT_LOGOUT_HOURS = 10;
 
 type LiveStatus = "working" | "travelling" | "break" | "offline";
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [sessions, setSessions] = useState<WorkSession[]>([]);
+  const [forcingId, setForcingId] = useState<string | null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
 
+  const reload = async () => {
+    setProfiles(await api.listProfiles());
+    setSessions(await api.listSessions());
+  };
+
+  const handleForceClockOut = async (s: WorkSession) => {
+    if (!user?.email) return;
+    if (!confirm(`Clock out ${s.fullName} for the day?`)) return;
+    setForcingId(s.id);
+    try {
+      await api.forceClockOut(s.id, user.email, "Auto-closed by admin (forgot to log off)");
+      toast.success(`${s.fullName} clocked out`);
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to clock out");
+    } finally {
+      setForcingId(null);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setProfiles(await api.listProfiles());
-      setSessions(await api.listSessions());
-    };
-    load();
-    const t = setInterval(load, 15000);
+    reload();
+    const t = setInterval(reload, 15000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeSessions = sessions.filter((s) => !s.clockOut);
