@@ -72,14 +72,14 @@ export default function AdminEmployees() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Employees</h1>
           <p className="text-sm text-muted-foreground">{filtered.length} of {profiles.length}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCsv} className="gap-2"><FileSpreadsheet className="h-4 w-4" />Export Excel/CSV</Button>
-          <Button variant="outline" onClick={exportPdf} className="gap-2"><Download className="h-4 w-4" />Export PDF</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportCsv} className="gap-2 flex-1 sm:flex-none"><FileSpreadsheet className="h-4 w-4" /><span className="hidden xs:inline">Export </span>CSV</Button>
+          <Button variant="outline" onClick={exportPdf} className="gap-2 flex-1 sm:flex-none"><Download className="h-4 w-4" /><span className="hidden xs:inline">Export </span>PDF</Button>
           <AddEmployeeDialog onAdded={reload} />
         </div>
       </header>
