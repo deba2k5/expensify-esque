@@ -66,10 +66,10 @@ export default function AdminAnalytics() {
         </Select>
       </header>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-2xl font-semibold">{productivity}%</div></Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-xl sm:text-2xl font-semibold">{productivity}%</div></Card>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
