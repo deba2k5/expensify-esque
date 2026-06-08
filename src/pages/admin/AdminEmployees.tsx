@@ -112,44 +112,49 @@ export default function AdminEmployees() {
         </Select>
       </Card>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((p) => (
-              <TableRow key={p.email}>
-                <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
-                <TableCell>{p.fullName}</TableCell>
-                <TableCell>{p.email}</TableCell>
-                <TableCell>{p.department}</TableCell>
-                <TableCell className="capitalize">{p.employeeType}</TableCell>
-                <TableCell>
-                  {!p.active ? <Badge variant="secondary">Deactivated</Badge>
-                    : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
-                    : <Badge variant="outline">Off-clock</Badge>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
-                    {p.active ? "Deactivate" : "Reactivate"}
-                  </Button>
-                </TableCell>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead className="hidden sm:table-cell">Department</TableHead>
+                <TableHead className="hidden lg:table-cell">Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead></TableHead>
               </TableRow>
-            ))}
-            {!filtered.length && (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((p) => (
+                <TableRow key={p.email}>
+                  <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{p.fullName}</div>
+                    <div className="md:hidden text-[11px] text-muted-foreground truncate max-w-[160px]">{p.email}</div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">{p.email}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{p.department}</TableCell>
+                  <TableCell className="hidden lg:table-cell capitalize">{p.employeeType}</TableCell>
+                  <TableCell>
+                    {!p.active ? <Badge variant="secondary">Off</Badge>
+                      : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
+                      : <Badge variant="outline">Idle</Badge>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
+                      {p.active ? "Deactivate" : "Reactivate"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!filtered.length && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </Card>
     </div>
   );
