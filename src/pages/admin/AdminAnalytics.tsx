@@ -50,13 +50,13 @@ export default function AdminAnalytics() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Analytics</h1>
           <p className="text-sm text-muted-foreground">Productivity, work-type mix, and per-employee hours.</p>
         </div>
         <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="1">Today</SelectItem>
             <SelectItem value="7">Last 7 days</SelectItem>
