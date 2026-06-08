@@ -72,19 +72,19 @@ export default function AdminEmployees() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Employees</h1>
           <p className="text-sm text-muted-foreground">{filtered.length} of {profiles.length}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCsv} className="gap-2"><FileSpreadsheet className="h-4 w-4" />Export Excel/CSV</Button>
-          <Button variant="outline" onClick={exportPdf} className="gap-2"><Download className="h-4 w-4" />Export PDF</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportCsv} className="gap-2 flex-1 sm:flex-none"><FileSpreadsheet className="h-4 w-4" /><span className="hidden xs:inline">Export </span>CSV</Button>
+          <Button variant="outline" onClick={exportPdf} className="gap-2 flex-1 sm:flex-none"><Download className="h-4 w-4" /><span className="hidden xs:inline">Export </span>PDF</Button>
           <AddEmployeeDialog onAdded={reload} />
         </div>
       </header>
 
-      <Card className="p-4 grid sm:grid-cols-4 gap-3">
+      <Card className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Input placeholder="Search name / email / ID" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={dept} onValueChange={setDept}>
           <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
@@ -112,44 +112,49 @@ export default function AdminEmployees() {
         </Select>
       </Card>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((p) => (
-              <TableRow key={p.email}>
-                <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
-                <TableCell>{p.fullName}</TableCell>
-                <TableCell>{p.email}</TableCell>
-                <TableCell>{p.department}</TableCell>
-                <TableCell className="capitalize">{p.employeeType}</TableCell>
-                <TableCell>
-                  {!p.active ? <Badge variant="secondary">Deactivated</Badge>
-                    : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
-                    : <Badge variant="outline">Off-clock</Badge>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
-                    {p.active ? "Deactivate" : "Reactivate"}
-                  </Button>
-                </TableCell>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead className="hidden sm:table-cell">Department</TableHead>
+                <TableHead className="hidden lg:table-cell">Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead></TableHead>
               </TableRow>
-            ))}
-            {!filtered.length && (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((p) => (
+                <TableRow key={p.email}>
+                  <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{p.fullName}</div>
+                    <div className="md:hidden text-[11px] text-muted-foreground truncate max-w-[160px]">{p.email}</div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">{p.email}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{p.department}</TableCell>
+                  <TableCell className="hidden lg:table-cell capitalize">{p.employeeType}</TableCell>
+                  <TableCell>
+                    {!p.active ? <Badge variant="secondary">Off</Badge>
+                      : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
+                      : <Badge variant="outline">Idle</Badge>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
+                      {p.active ? "Deactivate" : "Reactivate"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!filtered.length && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </Card>
     </div>
   );

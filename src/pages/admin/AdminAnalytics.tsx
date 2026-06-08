@@ -50,13 +50,13 @@ export default function AdminAnalytics() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Analytics</h1>
           <p className="text-sm text-muted-foreground">Productivity, work-type mix, and per-employee hours.</p>
         </div>
         <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="1">Today</SelectItem>
             <SelectItem value="7">Last 7 days</SelectItem>
@@ -66,10 +66,10 @@ export default function AdminAnalytics() {
         </Select>
       </header>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-2xl font-semibold">{productivity}%</div></Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
+        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-xl sm:text-2xl font-semibold">{productivity}%</div></Card>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
