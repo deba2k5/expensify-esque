@@ -84,7 +84,7 @@ export default function AdminEmployees() {
         </div>
       </header>
 
-      <Card className="p-4 grid sm:grid-cols-4 gap-3">
+      <Card className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Input placeholder="Search name / email / ID" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={dept} onValueChange={setDept}>
           <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
