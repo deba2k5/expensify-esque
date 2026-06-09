@@ -7,7 +7,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export default function AdminAuditLog() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
-  useEffect(() => { api.listAudit().then(setLogs); }, []);
+  
+  useEffect(() => {
+    const load = async () => setLogs(await api.listAudit());
+    load();
+    const interval = setInterval(load, 15000); // Refresh every 15 seconds
+    return () => clearInterval(interval);
+  }, []);
+  
+  const formatDetails = (meta: any) => {
+    if (!meta) return "—";
+    if (typeof meta === "object") {
+      const parts = [];
+      if (meta.location) parts.push(`Location: ${meta.location}`);
+      if (meta.distance !== undefined) parts.push(`Distance: ${meta.distance}m`);
+      if (meta.comment) parts.push(`Comment: ${meta.comment}`);
+      if (parts.length > 0) return parts.join(" • ");
+      return JSON.stringify(meta);
+    }
+    return String(meta);
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Audit log</h1>
@@ -30,7 +50,7 @@ export default function AdminAuditLog() {
                   <TableCell className="text-xs break-all">{l.actor}</TableCell>
                   <TableCell><Badge variant="outline" className="whitespace-nowrap">{l.action}</Badge></TableCell>
                   <TableCell className="text-xs hidden md:table-cell break-all">{l.target || "—"}</TableCell>
-                  <TableCell className="text-xs font-mono hidden lg:table-cell break-all max-w-[320px]">{l.meta ? JSON.stringify(l.meta) : ""}</TableCell>
+                  <TableCell className="text-xs hidden lg:table-cell break-all max-w-[320px]">{formatDetails(l.meta)}</TableCell>
                 </TableRow>
               ))}
               {!logs.length && (
