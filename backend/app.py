@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from pymongo import MongoClient, DESCENDING
+from pymongo import MongoClient, DESCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from bson.objectid import ObjectId
 import requests
@@ -18,9 +18,13 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # MongoDB Connection
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://username:password@cluster.mongodb.net/workforce-vision")
+MONGODB_URI = os.getenv(
+    "MONGODB_URI",
+    "mongodb+srv://sinhasapp:sinhasapp123@sinhasapp.mhknlyr.mongodb.net/?appName=sinhasapp",
+)
+MONGODB_DB = os.getenv("MONGODB_DB", "sinhasapp")
 client = MongoClient(MONGODB_URI)
-db = client["workforce-vision"]
+db = client[MONGODB_DB]
 profiles_collection = db["profiles"]
 sessions_collection = db["sessions"]
 audit_collection = db["audit_logs"]
@@ -37,6 +41,39 @@ try:
     audit_collection.create_index([("at", -1)])
 except Exception as e:
     print(f"Index creation warning: {e}")
+
+DEFAULT_EMPLOYEES = [
+    {
+        "employeeId": "EMPLOYEE2",
+        "fullName": "Employee 2",
+        "email": "employee2@sinhas.ch",
+        "mobile": "",
+        "department": "-",
+        "employeeType": "permanent",
+        "active": True,
+    },
+]
+
+
+def ensure_default_profiles():
+    """Keep required employee profiles available in local/prod data."""
+    now = datetime.utcnow().isoformat()
+    for profile in DEFAULT_EMPLOYEES:
+        insert_profile = {k: v for k, v in profile.items() if k != "active"}
+        profiles_collection.update_one(
+            {"email": profile["email"]},
+            {
+                "$setOnInsert": {**insert_profile, "createdAt": now},
+                "$set": {"active": True, "updatedAt": now},
+            },
+            upsert=True,
+        )
+
+
+try:
+    ensure_default_profiles()
+except Exception as e:
+    print(f"Default profile bootstrap warning: {e}")
 
 # Utility Functions
 def json_response(obj):
@@ -60,9 +97,24 @@ def log_audit(actor, action, target, meta=None):
         "meta": meta or {},
     }
     audit_collection.insert_one(entry)
-    # Broadcast to all connected clients
-    socketio.emit("audit_log_created", json_response(entry), broadcast=True)
+    safe_emit("audit_log_created", json_response(entry))
     return entry
+
+
+def safe_emit(event, payload):
+    """Broadcast real-time updates without failing the API request."""
+    try:
+        socketio.emit(event, payload)
+    except Exception as e:
+        print(f"Socket emit warning for {event}: {e}")
+
+
+def session_lookup(session_id):
+    """Find sessions by app id first, then Mongo _id for compatibility."""
+    query = {"id": session_id}
+    if ObjectId.is_valid(session_id):
+        query = {"$or": [{"id": session_id}, {"_id": ObjectId(session_id)}]}
+    return query
 
 
 def require_auth(f):
@@ -121,7 +173,7 @@ def upsert_profile():
             {"email": email},
             {"$set": data},
             upsert=True,
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         
         # Log audit
@@ -186,8 +238,7 @@ def create_session():
         actor = request.headers.get("X-User-Email", data.get("email", "system"))
         log_audit(actor, "session_created", str(result.inserted_id), {"session": data})
         
-        # Broadcast to admin
-        socketio.emit("session_created", json_response(session), broadcast=True)
+        safe_emit("session_created", json_response(session))
         
         return jsonify(json_response(session)), 201
     except Exception as e:
@@ -198,7 +249,7 @@ def create_session():
 def get_session(session_id):
     """Fetch a single session."""
     try:
-        session = sessions_collection.find_one({"_id": ObjectId(session_id)})
+        session = sessions_collection.find_one(session_lookup(session_id))
         if not session:
             return jsonify({"error": "Session not found"}), 404
         return jsonify(json_response(session)), 200
@@ -214,9 +265,9 @@ def update_session(session_id):
         data["updatedAt"] = datetime.utcnow().isoformat()
         
         result = sessions_collection.find_one_and_update(
-            {"_id": ObjectId(session_id)},
+            session_lookup(session_id),
             {"$set": data},
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         
         if not result:
@@ -225,8 +276,7 @@ def update_session(session_id):
         actor = request.headers.get("X-User-Email", "system")
         log_audit(actor, "session_updated", session_id, {"updates": data})
         
-        # Broadcast update
-        socketio.emit("session_updated", json_response(result), broadcast=True)
+        safe_emit("session_updated", json_response(result))
         
         return jsonify(json_response(result)), 200
     except Exception as e:
@@ -246,12 +296,12 @@ def add_break(session_id):
         }
         
         result = sessions_collection.find_one_and_update(
-            {"_id": ObjectId(session_id)},
+            session_lookup(session_id),
             {
                 "$push": {"breaks": break_entry},
                 "$set": {"updatedAt": datetime.utcnow().isoformat()},
             },
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         
         if not result:
@@ -260,7 +310,7 @@ def add_break(session_id):
         actor = request.headers.get("X-User-Email", "system")
         log_audit(actor, "break_added", session_id, {"break": break_entry})
         
-        socketio.emit("break_added", json_response(result), broadcast=True)
+        safe_emit("break_added", json_response(result))
         
         return jsonify(json_response(result)), 200
     except Exception as e:
@@ -281,18 +331,18 @@ def add_location(session_id):
         }
         
         result = sessions_collection.find_one_and_update(
-            {"_id": ObjectId(session_id)},
+            session_lookup(session_id),
             {
                 "$push": {"locations": location_entry},
                 "$set": {"updatedAt": datetime.utcnow().isoformat()},
             },
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         
         if not result:
             return jsonify({"error": "Session not found"}), 404
         
-        socketio.emit("location_added", json_response(result), broadcast=True)
+        safe_emit("location_added", json_response(result))
         
         return jsonify(json_response(result)), 200
     except Exception as e:
@@ -322,7 +372,7 @@ def create_audit_log():
         result = audit_collection.insert_one(data)
         log_entry = audit_collection.find_one({"_id": result.inserted_id})
         
-        socketio.emit("audit_log_created", json_response(log_entry), broadcast=True)
+        safe_emit("audit_log_created", json_response(log_entry))
         
         return jsonify(json_response(log_entry)), 201
     except Exception as e:
@@ -389,13 +439,13 @@ def handle_join_admin():
 @socketio.on("session_update")
 def handle_session_update(data):
     """Broadcast real-time session update."""
-    emit("session_real_time_update", data, broadcast=True)
+    socketio.emit("session_real_time_update", data)
 
 
 @socketio.on("profile_update")
 def handle_profile_update(data):
     """Broadcast real-time profile update."""
-    emit("profile_real_time_update", data, broadcast=True)
+    socketio.emit("profile_real_time_update", data)
 
 
 # ============ HEALTH CHECK ============

@@ -13,7 +13,8 @@
     }
   ],
   "env": {
-    "MONGODB_URI": "mongodb+srv://sinhasapp:sinhasapp@sinhasapp.mhknlyr.mongodb.net/?appName=sinhasapp",
+    "MONGODB_URI": "mongodb+srv://sinhasapp:sinhas123@sinhasapp.mhknlyr.mongodb.net/?appName=sinhasapp",
+    "MONGODB_DB": "sinhasapp",
     "GOOGLE_DRIVE_FOLDER_ID": "1i5eJ2S3LVEsnEYI8gpljk-E0eoq6rCSb",
     "FLASK_ENV": "production",
     "ADMIN_EMAILS": "admin@sinhas.ch,manager@sinhas.ch",
