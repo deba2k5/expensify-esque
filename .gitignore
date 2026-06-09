@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# Embedded repos
+expensify-esque/
+expensify-esque.worktrees/
+
 # Node modules
 node_modules/
 npm-debug.log*
