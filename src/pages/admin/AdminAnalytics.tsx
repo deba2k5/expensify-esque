@@ -96,14 +96,15 @@ export default function AdminAnalytics() {
             <Download className="h-4 w-4" /> Export PDF
           </Button>
           <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">Today</SelectItem>
-            <SelectItem value="7">Last 7 days</SelectItem>
-            <SelectItem value="30">Last 30 days</SelectItem>
-            <SelectItem value="365">Last 12 months</SelectItem>
-          </SelectContent>
-        </Select>
+            <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Today</SelectItem>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="365">Last 12 months</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
