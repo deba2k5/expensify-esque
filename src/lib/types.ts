@@ -51,6 +51,7 @@ export interface LocationPing {
   accuracy: number;
   at: string;
   outsideGeofence?: boolean;
+  locationName?: string;
 }
 
 export type Status = "pending" | "approved" | "rejected";

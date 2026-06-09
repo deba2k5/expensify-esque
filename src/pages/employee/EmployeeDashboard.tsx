@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, fmtDuration, haversine } from "@/lib/api";
+import { api, fmtDuration, haversine, reverseGeocode } from "@/lib/api";
 import type { BreakEntry, WorkSession, WorkType, TravelLog } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,11 +98,15 @@ export default function EmployeeDashboard() {
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const locationName = await reverseGeocode(lat, lng);
           const ping = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
+            lat,
+            lng,
             accuracy: pos.coords.accuracy,
             at: new Date().toISOString(),
+            locationName,
           };
           if (ping.accuracy > 200) return;
           if (!baseLocation.current) baseLocation.current = { lat: ping.lat, lng: ping.lng };
@@ -116,9 +120,9 @@ export default function EmployeeDashboard() {
                 actor: user!.email!,
                 action: "geofence.exit",
                 target: session.id,
-                meta: { distance: Math.round(dist) },
+                meta: { distance: Math.round(dist), location: locationName },
               });
-              toast.warning(`Outside 100m geofence (${Math.round(dist)}m). Admin notified.`);
+              toast.warning(`Outside 100m geofence (${Math.round(dist)}m) at ${locationName || "unknown location"}. Admin notified.`);
             }
           } catch (err) {
             toast.error((err as Error).message || "Could not update location");
@@ -298,7 +302,12 @@ export default function EmployeeDashboard() {
   }, [history]);
 
   const points = (session?.locations || []).map((l, i) => ({
-    id: String(i), lat: l.lat, lng: l.lng, label: new Date(l.at).toLocaleTimeString(),
+    id: String(i), 
+    lat: l.lat, 
+    lng: l.lng, 
+    label: l.locationName 
+      ? `${l.locationName} - ${new Date(l.at).toLocaleTimeString()}` 
+      : new Date(l.at).toLocaleTimeString(),
     accent: l.outsideGeofence,
   }));
 

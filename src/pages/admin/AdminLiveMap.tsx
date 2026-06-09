@@ -19,11 +19,12 @@ export default function AdminLiveMap() {
       if (!last) return null;
       const travelling = s.travels?.some((t) => !t.endedAt);
       const dest = s.travels?.find((t) => !t.endedAt)?.destination;
+      const locationPart = last.locationName ? ` · ${last.locationName}` : "";
       return {
         id: s.id,
         lat: last.lat,
         lng: last.lng,
-        label: `${s.fullName}${travelling ? ` ✈ ${dest}` : ""} · ${new Date(last.at).toLocaleTimeString()}`,
+        label: `${s.fullName}${travelling ? ` ✈ ${dest}` : ""} · ${new Date(last.at).toLocaleTimeString()}${locationPart}`,
         accent: travelling,
       };
     })

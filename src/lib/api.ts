@@ -189,3 +189,24 @@ export const haversine = (a: { lat: number; lng: number }, b: { lat: number; lng
       Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 };
+
+export const reverseGeocode = async (lat: number, lng: number): Promise<string | null> => {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+    );
+    const data = await res.json();
+    if (data.display_name) {
+      // Try to get city, state, country for simplicity
+      const addr = data.address;
+      if (addr) {
+        const parts = [addr.city, addr.state, addr.country].filter(Boolean);
+        return parts.length > 0 ? parts.join(", ") : data.display_name;
+      }
+      return data.display_name;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
