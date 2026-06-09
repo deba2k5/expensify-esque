@@ -39,7 +39,7 @@ const GEOFENCE_RADIUS = 100; // meters
 export default function EmployeeDashboard() {
   const { profile, user } = useAuth();
   const [session, setSession] = useState<WorkSession | null>(null);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const [history, setHistory] = useState<WorkSession[]>([]);
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [description, setDescription] = useState("");
