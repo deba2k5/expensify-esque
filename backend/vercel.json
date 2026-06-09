@@ -19,6 +19,6 @@
     "FLASK_ENV": "production",
     "ADMIN_EMAILS": "admin@sinhas.ch,manager@sinhas.ch",
     "SECRET_KEY": "sinhas-workforce-vision-secret-key-2026",
-    "CORS_ORIGINS": "https://sinhas-frontend.vercel.app,http://localhost:3000"
+    "CORS_ORIGINS": "https://sinhas-frontend1.vercel.app,http://localhost:3000,http://localhost:8080,http://192.168.1.34:8080"
   }
 }
