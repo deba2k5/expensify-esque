@@ -289,17 +289,36 @@ export default function EmployeeDashboard() {
 
   const chartData = useMemo(() => {
     const days: { date: string; hours: number; breakH: number }[] = [];
+    const todayKey = new Date().toISOString().slice(0, 10);
+    
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
       const day = history.filter((h) => h.date === key);
-      const work = day.reduce((s, x) => s + (x.totalWorkMs || 0), 0) / 3600000;
-      const br = day.reduce((s, x) => s + (x.totalBreakMs || 0), 0) / 3600000;
-      days.push({ date: key.slice(5), hours: +work.toFixed(2), breakH: +br.toFixed(2) });
+      
+      let work = day.reduce((s, x) => s + (x.totalWorkMs || 0), 0);
+      let br = day.reduce((s, x) => s + (x.totalBreakMs || 0), 0);
+      
+      // Include current session's progress if it's today and not clocked out
+      if (key === todayKey && session && !session.clockOut) {
+        const currentWork = Date.now() - new Date(session.clockIn).getTime();
+        const currentBreak = session.breaks.reduce((sum, b) => {
+          const end = b.end ? new Date(b.end).getTime() : Date.now();
+          return sum + (end - new Date(b.start).getTime());
+        }, 0);
+        work += currentWork;
+        br += currentBreak;
+      }
+      
+      days.push({ 
+        date: key.slice(5), 
+        hours: +(work / 3600000).toFixed(2), 
+        breakH: +(br / 3600000).toFixed(2) 
+      });
     }
     return days;
-  }, [history]);
+  }, [history, session, tick]);
 
   const points = (session?.locations || []).map((l, i) => ({
     id: String(i), 
