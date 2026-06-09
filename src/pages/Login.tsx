@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ShieldCheck, MapPin, Clock4, Info } from "lucide-react";
+import { ShieldCheck, MapPin, Clock4 } from "lucide-react";
 import logoAsset from "@/assets/sinhas-logo.asset.json";
 import { firebaseAuth } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
@@ -180,13 +180,9 @@ export default function Login() {
               </TabsContent>
             </Tabs>
 
-            <div className="mt-2 rounded-lg border bg-muted/40 p-3 flex gap-2 text-[11px] text-muted-foreground">
-              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-info" />
-              <div>
-                First-time setup: ensure <strong>Firestore Database</strong> is enabled in your Firebase project
-                and rules allow authenticated reads/writes, otherwise data won't sync between devices.
-              </div>
-            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
+              Firebase handles sign-in. Workforce data syncs through the MongoDB backend so employees and admins can work at the same time.
+            </p>
           </Card>
 
           <p className="mt-6 text-center text-[11px] text-muted-foreground">

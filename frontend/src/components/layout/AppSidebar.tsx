@@ -41,11 +41,13 @@ export default function AppSidebar() {
   return (
     <aside className="w-60 shrink-0 border-r bg-sidebar flex flex-col">
       <div className="h-16 flex items-center px-5 border-b">
-        <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold mr-3">
-          +
-        </div>
+        <img 
+          src="/sinhas-logo.jpeg" 
+          alt="Sinha's Group Logo" 
+          className="h-10 w-10 rounded-md mr-3 object-cover"
+        />
         <div>
-          <div className="text-sm font-semibold leading-tight">Sinhas Track</div>
+          <div className="text-sm font-semibold leading-tight">Sinha's Group</div>
           <div className="text-[11px] text-muted-foreground">
             {isAdmin ? "Admin Console" : "Employee Portal"}
           </div>

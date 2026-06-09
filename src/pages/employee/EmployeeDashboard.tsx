@@ -46,18 +46,35 @@ export default function EmployeeDashboard() {
   const [breakType, setBreakType] = useState<BreakEntry["type"]>("short");
   const [travelOpen, setTravelOpen] = useState(false);
   const [travelDestination, setTravelDestination] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const baseLocation = useRef<{ lat: number; lng: number } | null>(null);
+
+  const runAction = async (action: string, fn: () => Promise<void>) => {
+    if (busyAction) return;
+    setBusyAction(action);
+    try {
+      await fn();
+    } catch (err) {
+      toast.error((err as Error).message || "Action failed. Please try again.");
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   useEffect(() => {
     if (!user?.email) return;
     (async () => {
-      const all = await api.listSessions({ email: user.email! });
-      const active = all.find((s) => !s.clockOut) || null;
-      setSession(active);
-      setHistory(all);
-      if (active) {
-        setAttachments(active.attachments);
-        setDescription(active.description || "");
+      try {
+        const all = await api.listSessions({ email: user.email! });
+        const active = all.find((s) => !s.clockOut) || null;
+        setSession(active);
+        setHistory(all);
+        if (active) {
+          setAttachments(active.attachments);
+          setDescription(active.description || "");
+        }
+      } catch (err) {
+        toast.error((err as Error).message || "Could not load your sessions");
       }
     })();
   }, [user]);
@@ -91,16 +108,20 @@ export default function EmployeeDashboard() {
           if (!baseLocation.current) baseLocation.current = { lat: ping.lat, lng: ping.lng };
           const dist = haversine(baseLocation.current, ping);
           const outside = dist > GEOFENCE_RADIUS && !activeTravel;
-          const updated = await api.pushLocation(session.id, { ...ping, outsideGeofence: outside });
-          setSession(updated);
-          if (outside) {
-            await api.log({
-              actor: user!.email!,
-              action: "geofence.exit",
-              target: session.id,
-              meta: { distance: Math.round(dist) },
-            });
-            toast.warning(`Outside 100m geofence (${Math.round(dist)}m). Admin notified.`);
+          try {
+            const updated = await api.pushLocation(session.id, { ...ping, outsideGeofence: outside });
+            setSession(updated);
+            if (outside) {
+              await api.log({
+                actor: user!.email!,
+                action: "geofence.exit",
+                target: session.id,
+                meta: { distance: Math.round(dist) },
+              });
+              toast.warning(`Outside 100m geofence (${Math.round(dist)}m). Admin notified.`);
+            }
+          } catch (err) {
+            toast.error((err as Error).message || "Could not update location");
           }
         },
         () => {},
@@ -119,49 +140,68 @@ export default function EmployeeDashboard() {
   };
 
   const clockIn = async () => {
-    if (!profile) return;
-    const s = await api.clockIn(profile);
-    setSession(s);
-    setAttachments([]);
-    setDescription("");
-    baseLocation.current = null;
-    await api.log({ actor: profile.email, action: "session.clock_in", target: s.id });
-    toast.success("Clocked in");
-    refreshHistory();
+    await runAction("clockIn", async () => {
+      if (!profile) throw new Error("Your profile is still loading. Try again in a moment.");
+      const active = await api.getActiveSession(profile.email);
+      if (active) {
+        setSession(active);
+        toast.info("You are already clocked in.");
+        return;
+      }
+      const s = await api.clockIn(profile);
+      setSession(s);
+      setAttachments([]);
+      setDescription("");
+      baseLocation.current = null;
+      await api.log({ actor: profile.email, action: "session.clock_in", target: s.id });
+      toast.success("Clocked in");
+      await refreshHistory();
+    });
   };
 
   const clockOut = async () => {
-    if (!session) return;
-    if (activeTravel) return toast.error("End your travel before clocking out");
-    const s = await api.clockOut(session.id);
-    setSession(s);
-    await api.log({ actor: user!.email!, action: "session.clock_out", target: s.id });
-    toast.success("Clocked out");
-    refreshHistory();
+    await runAction("clockOut", async () => {
+      if (!session) return;
+      if (activeTravel) throw new Error("End your travel before clocking out");
+      const s = await api.clockOut(session.id);
+      setSession(s);
+      await api.log({ actor: user!.email!, action: "session.clock_out", target: s.id });
+      toast.success("Clocked out");
+      await refreshHistory();
+    });
   };
 
   const startBreak = async () => {
-    if (!session) return;
-    const s = await api.addBreak(session.id, breakType);
-    setSession(s);
-    toast(`${breakType} break started`);
+    await runAction("startBreak", async () => {
+      if (!session) return;
+      const s = await api.addBreak(session.id, breakType);
+      setSession(s);
+      toast(`${breakType} break started`);
+    });
   };
 
   const endBreak = async () => {
-    if (!session) return;
-    const open = session.breaks.find((b) => !b.end);
-    if (!open) return;
-    const s = await api.endBreak(session.id, open.id);
-    setSession(s);
-    toast("Break ended");
+    await runAction("endBreak", async () => {
+      if (!session) return;
+      const open = session.breaks.find((b) => !b.end);
+      if (!open) return;
+      const s = await api.endBreak(session.id, open.id);
+      setSession(s);
+      toast("Break ended");
+    });
   };
 
   const setWorkType = async (wt: WorkType) => {
-    if (!session) return;
-    if (wt === "travel") return setTravelOpen(true);
-    const s = await api.setWorkType(session.id, wt);
-    setSession(s);
-    toast(`Work type: ${wt.split("_").join(" ")}`);
+    await runAction("workType", async () => {
+      if (!session) return;
+      if (wt === "travel") {
+        setTravelOpen(true);
+        return;
+      }
+      const s = await api.setWorkType(session.id, wt);
+      setSession(s);
+      toast(`Work type: ${wt.split("_").join(" ")}`);
+    });
   };
 
   const beginTravel = async () => {
@@ -220,12 +260,14 @@ export default function EmployeeDashboard() {
   };
 
   const submitReport = async () => {
-    if (!session) return;
-    if (!description.trim()) return toast.error("Add a short description");
-    const s = await api.submitReport(session.id, description, attachments);
-    setSession(s);
-    toast.success("Report submitted for admin review");
-    refreshHistory();
+    await runAction("submitReport", async () => {
+      if (!session) return;
+      if (!description.trim()) throw new Error("Add a short description");
+      const s = await api.submitReport(session.id, description, attachments);
+      setSession(s);
+      toast.success("Report submitted for admin review");
+      await refreshHistory();
+    });
   };
 
   const elapsedWork = (() => {
@@ -294,11 +336,11 @@ export default function EmployeeDashboard() {
         <Card className="p-5 sm:p-6 lg:col-span-2 space-y-5 shadow-card">
           <div className="flex flex-wrap items-center gap-3">
             {!session || session.clockOut ? (
-              <Button onClick={clockIn} size="lg" className="gap-2 bg-gradient-primary shadow-elevated">
+              <Button onClick={clockIn} size="lg" disabled={!!busyAction} className="gap-2 bg-gradient-primary shadow-elevated">
                 <Play className="h-4 w-4" /> Clock in
               </Button>
             ) : (
-              <Button onClick={clockOut} size="lg" variant="destructive" className="gap-2">
+              <Button onClick={clockOut} size="lg" variant="destructive" disabled={!!busyAction} className="gap-2">
                 <Square className="h-4 w-4" /> Clock out
               </Button>
             )}
@@ -312,19 +354,19 @@ export default function EmployeeDashboard() {
                     </SelectContent>
                   </Select>
                   {onBreak ? (
-                    <Button variant="outline" onClick={endBreak}>End break</Button>
+                    <Button variant="outline" onClick={endBreak} disabled={!!busyAction}>End break</Button>
                   ) : (
-                    <Button variant="outline" onClick={startBreak} className="gap-2">
+                    <Button variant="outline" onClick={startBreak} disabled={!!busyAction} className="gap-2">
                       <Coffee className="h-4 w-4" /> Start break
                     </Button>
                   )}
                 </div>
                 {activeTravel ? (
-                  <Button onClick={endTravel} className="gap-2 bg-info text-info-foreground hover:opacity-90">
+                  <Button onClick={endTravel} disabled={!!busyAction} className="gap-2 bg-info text-info-foreground hover:opacity-90">
                     <Navigation className="h-4 w-4" /> End travel
                   </Button>
                 ) : (
-                  <Button onClick={() => setTravelOpen(true)} variant="outline" className="gap-2">
+                  <Button onClick={() => setTravelOpen(true)} variant="outline" disabled={!!busyAction} className="gap-2">
                     <Plane className="h-4 w-4" /> Start travel
                   </Button>
                 )}
@@ -412,7 +454,7 @@ export default function EmployeeDashboard() {
                 maxLength={2000}
               />
               <FileUploader value={attachments} onChange={setAttachments} />
-              <Button onClick={submitReport} className="gap-2 bg-gradient-primary shadow-elevated">
+              <Button onClick={submitReport} disabled={!!busyAction} className="gap-2 bg-gradient-primary shadow-elevated">
                 <Send className="h-4 w-4" /> Submit for admin review
               </Button>
             </div>
@@ -490,7 +532,7 @@ export default function EmployeeDashboard() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTravelOpen(false)}>Cancel</Button>
-            <Button onClick={beginTravel} className="bg-gradient-primary">Start travel</Button>
+            <Button onClick={beginTravel} disabled={!!busyAction} className="bg-gradient-primary">Start travel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

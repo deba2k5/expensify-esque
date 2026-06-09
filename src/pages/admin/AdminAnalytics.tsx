@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { api, fmtDuration } from "@/lib/api";
 import type { WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { Download } from "lucide-react";
 
 export default function AdminAnalytics() {
   const [sessions, setSessions] = useState<WorkSession[]>([]);
@@ -48,6 +52,38 @@ export default function AdminAnalytics() {
   const totalBreak = filtered.reduce((s, x) => s + (x.totalBreakMs || 0), 0);
   const productivity = totalWork + totalBreak > 0 ? Math.round((totalWork / (totalWork + totalBreak)) * 100) : 0;
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Analytics Dashboard", 14, 22);
+    doc.setFontSize(12);
+    doc.text(`Range: Last ${range} days`, 14, 32);
+    doc.text(`Total Work Time: ${fmtDuration(totalWork)}`, 14, 40);
+    doc.text(`Total Break Time: ${fmtDuration(totalBreak)}`, 14, 48);
+    doc.text(`Productivity: ${productivity}%`, 14, 56);
+
+    // By day table
+    doc.setFontSize(14);
+    doc.text("Hours per Day", 14, 66);
+    autoTable(doc, {
+      head: [["Date", "Work (hrs)", "Break (hrs)"]],
+      body: byDay.map(d => [d.date, d.work, d.brk]),
+      startY: 72,
+    });
+
+    // By employee table
+    const byEmpTableStart = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.text("Hours by Employee", 14, byEmpTableStart);
+    autoTable(doc, {
+      head: [["Employee", "Hours"]],
+      body: byEmployee.map(e => [e.name, e.hours]),
+      startY: byEmpTableStart + 6,
+    });
+
+    doc.save(`analytics_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -55,7 +91,11 @@ export default function AdminAnalytics() {
           <h1 className="text-2xl font-semibold">Analytics</h1>
           <p className="text-sm text-muted-foreground">Productivity, work-type mix, and per-employee hours.</p>
         </div>
-        <Select value={range} onValueChange={setRange}>
+        <div className="flex gap-2">
+          <Button onClick={exportToPDF} className="gap-2">
+            <Download className="h-4 w-4" /> Export PDF
+          </Button>
+          <Select value={range} onValueChange={setRange}>
           <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="1">Today</SelectItem>

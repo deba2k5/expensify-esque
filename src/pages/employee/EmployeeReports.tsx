@@ -4,7 +4,11 @@ import { api, fmtDuration } from "@/lib/api";
 import type { WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { Download } from "lucide-react";
 
 export default function EmployeeReports() {
   const { user } = useAuth();
@@ -20,9 +24,41 @@ export default function EmployeeReports() {
     rejected: "bg-destructive text-destructive-foreground",
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Employee Reports - " + (user?.email || ""), 14, 22);
+    doc.setFontSize(12);
+    doc.text(new Date().toLocaleDateString(), 14, 32);
+
+    const tableData = list.map((s) => [
+      s.date,
+      new Date(s.clockIn).toLocaleTimeString(),
+      s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—",
+      fmtDuration((s.totalWorkMs || 0) - (s.totalBreakMs || 0)),
+      fmtDuration(s.totalBreakMs),
+      s.workType?.split("_").join(" ") || "—",
+      s.status,
+      s.adminComment || "—",
+    ]);
+
+    autoTable(doc, {
+      head: [["Date", "Clock In", "Clock Out", "Work", "Breaks", "Work Type", "Status", "Admin Comment"]],
+      body: tableData,
+      startY: 40,
+    });
+
+    doc.save(`reports_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">My reports</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">My reports</h1>
+        <Button onClick={exportToPDF} className="gap-2">
+          <Download className="h-4 w-4" /> Export PDF
+        </Button>
+      </div>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
