@@ -9,8 +9,13 @@ const ADMINS = ((import.meta.env.VITE_ADMIN_EMAILS as string | undefined) || "ad
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
-export const isAdminEmail = (email?: string | null) =>
-  !!email && ADMINS.includes(email.toLowerCase());
+console.log("ADMINS list:", ADMINS);
+
+export const isAdminEmail = (email?: string | null) => {
+  const result = !!email && ADMINS.includes(email.toLowerCase());
+  console.log("Checking admin status for:", email, "→", result);
+  return result;
+};
 
 export const WS_URL =
   (import.meta.env.VITE_WS_URL as string | undefined)?.replace(/\/$/, "") ||

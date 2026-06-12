@@ -5,7 +5,12 @@ const ADMINS = ((import.meta.env.VITE_ADMIN_EMAILS as string | undefined) || "ad
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
-export const isAdminEmail = (email?: string | null) =>
-  !!email && ADMINS.includes(email.toLowerCase());
+console.log("ADMINS list (frontend):", ADMINS);
+
+export const isAdminEmail = (email?: string | null) => {
+  const result = !!email && ADMINS.includes(email.toLowerCase());
+  console.log("Checking admin status for (frontend):", email, "→", result);
+  return result;
+};
 
 export const USE_MOCK_API = !API_BASE;
