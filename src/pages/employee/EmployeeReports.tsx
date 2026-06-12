@@ -18,6 +18,15 @@ export default function EmployeeReports() {
     api.listSessions({ email: user.email }).then(setList);
   }, [user]);
 
+  // Calculate session durations
+  const calculateSessionDurations = (s: WorkSession) => {
+    const clockIn = new Date(s.clockIn);
+    const clockOut = s.clockOut ? new Date(s.clockOut) : null;
+    const totalDayDurationMs = clockOut ? clockOut.getTime() - clockIn.getTime() : 0;
+    const actualWorkMs = (s.totalWorkMs || 0) - (s.totalBreakMs || 0);
+    return { totalDayDurationMs, actualWorkMs };
+  };
+
   const statusColor: Record<string, string> = {
     pending: "bg-warning text-warning-foreground",
     approved: "bg-success text-success-foreground",
@@ -31,22 +40,33 @@ export default function EmployeeReports() {
     doc.setFontSize(12);
     doc.text(new Date().toLocaleDateString(), 14, 32);
 
-    const tableData = list.map((s) => [
-      s.date,
-      new Date(s.clockIn).toLocaleTimeString(),
-      s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—",
-      fmtDuration((s.totalWorkMs || 0) - (s.totalBreakMs || 0)),
-      fmtDuration(s.totalBreakMs),
-      s.workType?.split("_").join(" ") || "—",
-      s.status,
-      s.adminComment || "—",
-    ]);
+    let totalWorkMs = 0;
+    const tableData = list.map((s) => {
+      const { totalDayDurationMs, actualWorkMs } = calculateSessionDurations(s);
+      totalWorkMs += actualWorkMs;
+      return [
+        s.date,
+        new Date(s.clockIn).toLocaleTimeString(),
+        s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—",
+        fmtDuration(totalDayDurationMs),
+        fmtDuration(actualWorkMs),
+        fmtDuration(s.totalBreakMs),
+        s.workType?.split("_").join(" ") || "—",
+        s.status,
+        s.adminComment || "—",
+      ];
+    });
 
     autoTable(doc, {
-      head: [["Date", "Clock In", "Clock Out", "Work", "Breaks", "Work Type", "Status", "Admin Comment"]],
+      head: [["Date", "Clock In", "Clock Out", "Total Day Duration", "Actual Work", "Breaks", "Work Type", "Status", "Admin Comment"]],
       body: tableData,
       startY: 40,
     });
+
+    // Add total work time at the end
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(14);
+    doc.text(`Total Actual Work Time: ${fmtDuration(totalWorkMs)}`, 14, finalY);
 
     doc.save(`reports_${new Date().toISOString().slice(0,10)}.pdf`);
   };
@@ -67,6 +87,7 @@ export default function EmployeeReports() {
                 <TableHead className="whitespace-nowrap">Date</TableHead>
                 <TableHead className="whitespace-nowrap">Clock in</TableHead>
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Clock out</TableHead>
+                <TableHead>Total Day Duration</TableHead>
                 <TableHead>Work</TableHead>
                 <TableHead className="hidden md:table-cell">Breaks</TableHead>
                 <TableHead className="hidden lg:table-cell">Work type</TableHead>
@@ -75,20 +96,24 @@ export default function EmployeeReports() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="whitespace-nowrap">{s.date}</TableCell>
-                  <TableCell className="whitespace-nowrap">{new Date(s.clockIn).toLocaleTimeString()}</TableCell>
-                  <TableCell className="whitespace-nowrap hidden sm:table-cell">{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap">{fmtDuration((s.totalWorkMs || 0) - (s.totalBreakMs || 0))}</TableCell>
-                  <TableCell className="whitespace-nowrap hidden md:table-cell">{fmtDuration(s.totalBreakMs)}</TableCell>
-                  <TableCell className="capitalize hidden lg:table-cell">{s.workType?.split("_").join(" ") || "—"}</TableCell>
-                  <TableCell><Badge className={statusColor[s.status]}>{s.status}</Badge></TableCell>
-                  <TableCell className="text-xs hidden lg:table-cell">{s.adminComment || "—"}</TableCell>
-                </TableRow>
-              ))}
+              {list.map((s) => {
+                const { totalDayDurationMs, actualWorkMs } = calculateSessionDurations(s);
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell className="whitespace-nowrap">{s.date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{new Date(s.clockIn).toLocaleTimeString()}</TableCell>
+                    <TableCell className="whitespace-nowrap hidden sm:table-cell">{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDuration(totalDayDurationMs)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDuration(actualWorkMs)}</TableCell>
+                    <TableCell className="whitespace-nowrap hidden md:table-cell">{fmtDuration(s.totalBreakMs)}</TableCell>
+                    <TableCell className="capitalize hidden lg:table-cell">{s.workType?.split("_").join(" ") || "—"}</TableCell>
+                    <TableCell><Badge className={statusColor[s.status]}>{s.status}</Badge></TableCell>
+                    <TableCell className="text-xs hidden lg:table-cell">{s.adminComment || "—"}</TableCell>
+                  </TableRow>
+                );
+              })}
               {!list.length && (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No sessions yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No sessions yet</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

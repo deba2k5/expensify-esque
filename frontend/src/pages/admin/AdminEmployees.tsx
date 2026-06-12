@@ -296,6 +296,14 @@ function EmployeeReportDialog({
   open: boolean; 
   onOpenChange: (open: boolean) => void; 
 }) {
+  const calculateSessionDurations = (s: WorkSession) => {
+    const clockIn = new Date(s.clockIn);
+    const clockOut = s.clockOut ? new Date(s.clockOut) : null;
+    const totalDayDurationMs = clockOut ? clockOut.getTime() - clockIn.getTime() : 0;
+    const actualWorkMs = (s.totalWorkMs || 0) - (s.totalBreakMs || 0);
+    return { totalDayDurationMs, actualWorkMs };
+  };
+
   const stats = useMemo(() => {
     const employeeSessions = sessions.filter(s => s.email === employee.email);
     const now = Date.now();
@@ -332,19 +340,19 @@ function EmployeeReportDialog({
       
       last7Days.push({
         date: dateKey.slice(5),
-        workHours: +(dayWorkMs / 3600000).toFixed(2),
+        workHours: +((dayWorkMs - dayBreakMs) / 3600000).toFixed(2),
         breakHours: +(dayBreakMs / 3600000).toFixed(2),
       });
     }
     
-    return { employeeSessions, totalWorkMs, totalBreakMs, last7Days };
+    return { employeeSessions, totalWorkMs: totalWorkMs - totalBreakMs, totalBreakMs, last7Days };
   }, [sessions, employee]);
 
   const exportPdf = () => {
     const doc = new jsPDF();
     
-    doc.setFontSize(20);
-    doc.text("Employee Report", 14, 22);
+    doc.setFontSize(18);
+    doc.text("Employee Report - " + employee.fullName, 14, 22);
     
     doc.setFontSize(12);
     doc.text(`Employee: ${employee.fullName}`, 14, 32);
@@ -355,22 +363,34 @@ function EmployeeReportDialog({
     doc.text(`Total Break Time: ${fmtDuration(stats.totalBreakMs)}`, 14, 72);
     
     // Work Sessions Table
-    const tableData = stats.employeeSessions.slice().reverse().map(s => [
-      s.date,
-      s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "-",
-      s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "-",
-      s.workType || "N/A",
-      s.status,
-      s.totalWorkMs ? fmtDuration(s.totalWorkMs) : "-",
-    ]);
+    let totalActualWorkMs = 0;
+    const tableData = stats.employeeSessions.slice().reverse().map(s => {
+      const { totalDayDurationMs, actualWorkMs } = calculateSessionDurations(s);
+      totalActualWorkMs += actualWorkMs;
+      return [
+        s.date,
+        s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "—",
+        s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—",
+        fmtDuration(totalDayDurationMs),
+        fmtDuration(actualWorkMs),
+        fmtDuration(s.totalBreakMs),
+        s.workType || "N/A",
+        s.status,
+      ];
+    });
     
     autoTable(doc, {
       startY: 80,
-      head: [["Date", "Clock In", "Clock Out", "Work Type", "Status", "Duration"]],
+      head: [["Date", "Clock In", "Clock Out", "Total Day Duration", "Actual Work", "Breaks", "Work Type", "Status"]],
       body: tableData,
       theme: "grid",
       styles: { fontSize: 8, cellPadding: 3 },
     });
+
+    // Add total work time
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(14);
+    doc.text(`Total Actual Work Time: ${fmtDuration(totalActualWorkMs)}`, 14, finalY);
     
     doc.save(`${employee.fullName.replace(/\s+/g, "_")}_report.pdf`);
   };
@@ -470,28 +490,35 @@ function EmployeeReportDialog({
                     <TableHead>Date</TableHead>
                     <TableHead>Clock In</TableHead>
                     <TableHead>Clock Out</TableHead>
+                    <TableHead>Total Day Duration</TableHead>
+                    <TableHead>Actual Work</TableHead>
+                    <TableHead>Breaks</TableHead>
                     <TableHead>Work Type</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Work Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stats.employeeSessions.slice().reverse().map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell>{s.date}</TableCell>
-                      <TableCell>{s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "-"}</TableCell>
-                      <TableCell>{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "-"}</TableCell>
-                      <TableCell>{s.workType || "N/A"}</TableCell>
-                      <TableCell>
-                        <Badge variant={s.status === "approved" ? "outline" : s.status === "rejected" ? "destructive" : "secondary"}>
-                          {s.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{s.totalWorkMs ? fmtDuration(s.totalWorkMs) : "-"}</TableCell>
-                    </TableRow>
-                  ))}
+                  {stats.employeeSessions.slice().reverse().map((s) => {
+                    const { totalDayDurationMs, actualWorkMs } = calculateSessionDurations(s);
+                    return (
+                      <TableRow key={s.id}>
+                        <TableCell>{s.date}</TableCell>
+                        <TableCell>{s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "—"}</TableCell>
+                        <TableCell>{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "—"}</TableCell>
+                        <TableCell>{fmtDuration(totalDayDurationMs)}</TableCell>
+                        <TableCell>{fmtDuration(actualWorkMs)}</TableCell>
+                        <TableCell>{fmtDuration(s.totalBreakMs)}</TableCell>
+                        <TableCell>{s.workType || "N/A"}</TableCell>
+                        <TableCell>
+                          <Badge variant={s.status === "approved" ? "outline" : s.status === "rejected" ? "destructive" : "secondary"}>
+                            {s.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {!stats.employeeSessions.length && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No sessions found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No sessions found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
