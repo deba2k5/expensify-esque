@@ -44,7 +44,7 @@ export default function Login() {
     try {
       await signIn(email.trim(), password);
       toast.success("Welcome back");
-      nav("/", { replace: true });
+      nav(isAdminEmail(email.trim()) ? "/admin" : "/", { replace: true });
     } catch (err) {
       toast.error(friendlyError(err));
     } finally {
