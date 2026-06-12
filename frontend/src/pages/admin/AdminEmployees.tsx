@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, fmtDuration } from "@/lib/api";
 import type { EmployeeProfile, WorkSession } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Download, FileSpreadsheet, Plus } from "lucide-react";
+import { Download, FileSpreadsheet, Plus, BarChart3, Eye, FileText } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function AdminEmployees() {
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
@@ -19,12 +22,22 @@ export default function AdminEmployees() {
   const [dept, setDept] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [type, setType] = useState<string>("all");
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [tick, setTick] = useState(0);
 
   const reload = async () => {
     setProfiles(await api.listProfiles());
     setSessions(await api.listSessions());
   };
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    reload();
+    const interval = setInterval(() => {
+      reload();
+      setTick(t => t + 1);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const activeEmails = new Set(sessions.filter((s) => !s.clockOut).map((s) => s.email));
   const departments = Array.from(new Set(profiles.map((p) => p.department).filter(Boolean)));
@@ -70,21 +83,101 @@ export default function AdminEmployees() {
     if (w) { w.document.write(html); w.document.close(); }
   };
 
+  const getEmployeeStats = (email: string) => {
+    const employeeSessions = sessions.filter(s => s.email === email);
+    const now = Date.now();
+    
+    // Calculate stats
+    let totalWorkMs = 0;
+    let totalBreakMs = 0;
+    const last7Days = [];
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().slice(0, 10);
+      const daySessions = employeeSessions.filter(s => s.date === dateKey);
+      
+      let dayWorkMs = 0;
+      let dayBreakMs = 0;
+      
+      daySessions.forEach(s => {
+        if (!s.clockOut) {
+          dayWorkMs += now - new Date(s.clockIn).getTime();
+          dayBreakMs += s.breaks.reduce((sum, b) => {
+            const end = b.end ? new Date(b.end).getTime() : now;
+            return sum + (end - new Date(b.start).getTime());
+          }, 0);
+        } else {
+          dayWorkMs += s.totalWorkMs || 0;
+          dayBreakMs += s.totalBreakMs || 0;
+        }
+      });
+      
+      totalWorkMs += dayWorkMs;
+      totalBreakMs += dayBreakMs;
+      
+      last7Days.push({
+        date: dateKey.slice(5),
+        workHours: +(dayWorkMs / 3600000).toFixed(2),
+        breakHours: +(dayBreakMs / 3600000).toFixed(2),
+      });
+    }
+    
+    return { employeeSessions, totalWorkMs, totalBreakMs, last7Days };
+  };
+
+  const exportEmployeePdf = (employee: EmployeeProfile) => {
+    const stats = getEmployeeStats(employee.email);
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.text("Employee Report", 14, 22);
+    
+    doc.setFontSize(12);
+    doc.text(`Employee: ${employee.fullName}`, 14, 32);
+    doc.text(`Email: ${employee.email}`, 14, 40);
+    doc.text(`Department: ${employee.department}`, 14, 48);
+    doc.text(`Type: ${employee.employeeType}`, 14, 56);
+    doc.text(`Total Work Time: ${fmtDuration(stats.totalWorkMs)}`, 14, 64);
+    doc.text(`Total Break Time: ${fmtDuration(stats.totalBreakMs)}`, 14, 72);
+    
+    // Work Sessions Table
+    const tableData = stats.employeeSessions.slice().reverse().map(s => [
+      s.date,
+      s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "-",
+      s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "-",
+      s.workType || "N/A",
+      s.status,
+      s.totalWorkMs ? fmtDuration(s.totalWorkMs) : "-",
+    ]);
+    
+    autoTable(doc, {
+      startY: 80,
+      head: [["Date", "Clock In", "Clock Out", "Work Type", "Status", "Duration"]],
+      body: tableData,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3 },
+    });
+    
+    doc.save(`${employee.fullName.replace(/\s+/g, "_")}_report.pdf`);
+  };
+
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between flex-wrap gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Employees</h1>
           <p className="text-sm text-muted-foreground">{filtered.length} of {profiles.length}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCsv} className="gap-2"><FileSpreadsheet className="h-4 w-4" />Export Excel/CSV</Button>
-          <Button variant="outline" onClick={exportPdf} className="gap-2"><Download className="h-4 w-4" />Export PDF</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportCsv} className="gap-2 flex-1 sm:flex-none"><FileSpreadsheet className="h-4 w-4" /><span className="hidden xs:inline">Export </span>CSV</Button>
+          <Button variant="outline" onClick={exportPdf} className="gap-2 flex-1 sm:flex-none"><Download className="h-4 w-4" /><span className="hidden xs:inline">Export </span>PDF</Button>
           <AddEmployeeDialog onAdded={reload} />
         </div>
       </header>
 
-      <Card className="p-4 grid sm:grid-cols-4 gap-3">
+      <Card className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Input placeholder="Search name / email / ID" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={dept} onValueChange={setDept}>
           <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
@@ -112,46 +205,301 @@ export default function AdminEmployees() {
         </Select>
       </Card>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((p) => (
-              <TableRow key={p.email}>
-                <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
-                <TableCell>{p.fullName}</TableCell>
-                <TableCell>{p.email}</TableCell>
-                <TableCell>{p.department}</TableCell>
-                <TableCell className="capitalize">{p.employeeType}</TableCell>
-                <TableCell>
-                  {!p.active ? <Badge variant="secondary">Deactivated</Badge>
-                    : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
-                    : <Badge variant="outline">Off-clock</Badge>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
-                    {p.active ? "Deactivate" : "Reactivate"}
-                  </Button>
-                </TableCell>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead className="hidden sm:table-cell">Department</TableHead>
+                <TableHead className="hidden lg:table-cell">Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-            {!filtered.length && (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((p) => {
+                const stats = getEmployeeStats(p.email);
+                return (
+                  <TableRow key={p.email}>
+                    <TableCell className="font-mono text-xs">{p.employeeId}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{p.fullName}</div>
+                      <div className="md:hidden text-[11px] text-muted-foreground truncate max-w-[160px]">{p.email}</div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">{p.email}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{p.department}</TableCell>
+                    <TableCell className="hidden lg:table-cell capitalize">{p.employeeType}</TableCell>
+                    <TableCell>
+                      {!p.active ? <Badge variant="secondary">Off</Badge>
+                        : activeEmails.has(p.email) ? <Badge className="bg-success text-success-foreground">Working</Badge>
+                        : <Badge variant="outline">Idle</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => {
+                            setSelectedEmployee(p);
+                            setReportDialogOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" /> View
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => exportEmployeePdf(p)}
+                        >
+                          <Download className="h-4 w-4 mr-1" /> PDF
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => toggleActive(p)}>
+                          {p.active ? "Deactivate" : "Reactivate"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!filtered.length && (
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No employees match the filters</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </Card>
+
+      {/* Employee Report Dialog */}
+      {selectedEmployee && (
+        <EmployeeReportDialog
+          employee={selectedEmployee}
+          sessions={sessions}
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+        />
+      )}
     </div>
+  );
+}
+
+function EmployeeReportDialog({ 
+  employee, 
+  sessions, 
+  open, 
+  onOpenChange 
+}: { 
+  employee: EmployeeProfile; 
+  sessions: WorkSession[]; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void; 
+}) {
+  const stats = useMemo(() => {
+    const employeeSessions = sessions.filter(s => s.email === employee.email);
+    const now = Date.now();
+    
+    // Calculate stats
+    let totalWorkMs = 0;
+    let totalBreakMs = 0;
+    const last7Days = [];
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().slice(0, 10);
+      const daySessions = employeeSessions.filter(s => s.date === dateKey);
+      
+      let dayWorkMs = 0;
+      let dayBreakMs = 0;
+      
+      daySessions.forEach(s => {
+        if (!s.clockOut) {
+          dayWorkMs += now - new Date(s.clockIn).getTime();
+          dayBreakMs += s.breaks.reduce((sum, b) => {
+            const end = b.end ? new Date(b.end).getTime() : now;
+            return sum + (end - new Date(b.start).getTime());
+          }, 0);
+        } else {
+          dayWorkMs += s.totalWorkMs || 0;
+          dayBreakMs += s.totalBreakMs || 0;
+        }
+      });
+      
+      totalWorkMs += dayWorkMs;
+      totalBreakMs += dayBreakMs;
+      
+      last7Days.push({
+        date: dateKey.slice(5),
+        workHours: +(dayWorkMs / 3600000).toFixed(2),
+        breakHours: +(dayBreakMs / 3600000).toFixed(2),
+      });
+    }
+    
+    return { employeeSessions, totalWorkMs, totalBreakMs, last7Days };
+  }, [sessions, employee]);
+
+  const exportPdf = () => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.text("Employee Report", 14, 22);
+    
+    doc.setFontSize(12);
+    doc.text(`Employee: ${employee.fullName}`, 14, 32);
+    doc.text(`Email: ${employee.email}`, 14, 40);
+    doc.text(`Department: ${employee.department}`, 14, 48);
+    doc.text(`Type: ${employee.employeeType}`, 14, 56);
+    doc.text(`Total Work Time: ${fmtDuration(stats.totalWorkMs)}`, 14, 64);
+    doc.text(`Total Break Time: ${fmtDuration(stats.totalBreakMs)}`, 14, 72);
+    
+    // Work Sessions Table
+    const tableData = stats.employeeSessions.slice().reverse().map(s => [
+      s.date,
+      s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "-",
+      s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "-",
+      s.workType || "N/A",
+      s.status,
+      s.totalWorkMs ? fmtDuration(s.totalWorkMs) : "-",
+    ]);
+    
+    autoTable(doc, {
+      startY: 80,
+      head: [["Date", "Clock In", "Clock Out", "Work Type", "Status", "Duration"]],
+      body: tableData,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3 },
+    });
+    
+    doc.save(`${employee.fullName.replace(/\s+/g, "_")}_report.pdf`);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <span>{employee.fullName} - Full Report</span>
+            <Button onClick={exportPdf} className="gap-2">
+              <Download className="h-4 w-4" /> Export PDF
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Employee Info */}
+          <Card className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Full Name</div>
+                <div className="font-medium">{employee.fullName}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Email</div>
+                <div className="font-medium">{employee.email}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Department</div>
+                <div className="font-medium">{employee.department}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Type</div>
+                <div className="font-medium capitalize">{employee.employeeType}</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Summary Stats */}
+          <Card className="p-4">
+            <h3 className="font-medium mb-4">Summary</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 border rounded-lg">
+                <div className="text-sm text-muted-foreground mb-1">Total Work Time</div>
+                <div className="text-2xl font-bold">{fmtDuration(stats.totalWorkMs)}</div>
+              </div>
+              <div className="text-center p-4 border rounded-lg">
+                <div className="text-sm text-muted-foreground mb-1">Total Break Time</div>
+                <div className="text-2xl font-bold">{fmtDuration(stats.totalBreakMs)}</div>
+              </div>
+              <div className="text-center p-4 border rounded-lg">
+                <div className="text-sm text-muted-foreground mb-1">Total Sessions</div>
+                <div className="text-2xl font-bold">{stats.employeeSessions.length}</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Last 7 Days Charts */}
+          <Card className="p-4">
+            <h3 className="font-medium mb-4">Last 7 Days</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={stats.last7Days}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" fontSize={12} />
+                    <YAxis fontSize={12} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="workHours" stroke="hsl(var(--primary))" strokeWidth={2} name="Work Hours" />
+                    <Line type="monotone" dataKey="breakHours" stroke="hsl(var(--warning))" strokeWidth={2} name="Break Hours" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.last7Days}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" fontSize={12} />
+                    <YAxis fontSize={12} />
+                    <Tooltip />
+                    <Bar dataKey="workHours" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Work Hours" />
+                    <Bar dataKey="breakHours" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} name="Break Hours" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </Card>
+
+          {/* Session History */}
+          <Card className="p-4">
+            <h3 className="font-medium mb-4">Session History</h3>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Clock In</TableHead>
+                    <TableHead>Clock Out</TableHead>
+                    <TableHead>Work Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Work Duration</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stats.employeeSessions.slice().reverse().map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell>{s.date}</TableCell>
+                      <TableCell>{s.clockIn ? new Date(s.clockIn).toLocaleTimeString() : "-"}</TableCell>
+                      <TableCell>{s.clockOut ? new Date(s.clockOut).toLocaleTimeString() : "-"}</TableCell>
+                      <TableCell>{s.workType || "N/A"}</TableCell>
+                      <TableCell>
+                        <Badge variant={s.status === "approved" ? "outline" : s.status === "rejected" ? "destructive" : "secondary"}>
+                          {s.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{s.totalWorkMs ? fmtDuration(s.totalWorkMs) : "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!stats.employeeSessions.length && (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No sessions found</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
