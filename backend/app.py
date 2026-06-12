@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from pymongo import MongoClient, DESCENDING, ReturnDocument
@@ -44,11 +44,65 @@ except Exception as e:
 
 DEFAULT_EMPLOYEES = [
     {
-        "employeeId": "EMPLOYEE2",
-        "fullName": "Employee 2",
-        "email": "employee2@sinhas.ch",
+        "employeeId": "EMP001",
+        "fullName": "Debangshu",
+        "email": "debangshu@sinhas.ch",
         "mobile": "",
-        "department": "-",
+        "department": "Administration",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP002",
+        "fullName": "Nirmalya",
+        "email": "nirmalya@sinhas.ch",
+        "mobile": "",
+        "department": "Administration",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP003",
+        "fullName": "Rishu",
+        "email": "rishu@sinhas.ch",
+        "mobile": "",
+        "department": "Administration",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP004",
+        "fullName": "Rajeev",
+        "email": "rajeev@sinhas.ch",
+        "mobile": "",
+        "department": "Administration",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP005",
+        "fullName": "Soumika",
+        "email": "soumika@sinhas.ch",
+        "mobile": "",
+        "department": "Operations",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP006",
+        "fullName": "Sushmita",
+        "email": "sushmita@sinhas.ch",
+        "mobile": "",
+        "department": "Operations",
+        "employeeType": "permanent",
+        "active": True,
+    },
+    {
+        "employeeId": "EMP007",
+        "fullName": "Megha",
+        "email": "megha@sinhas.ch",
+        "mobile": "",
+        "department": "Operations",
         "employeeType": "permanent",
         "active": True,
     },
@@ -463,17 +517,9 @@ def health_check():
 
 @app.get("/")
 def index():
-    """Root endpoint."""
-    return jsonify({
-        "name": "Sinhas Track - Backend API",
-        "version": "1.0.0",
-        "endpoints": {
-            "profiles": "/api/profiles",
-            "sessions": "/api/sessions",
-            "audit": "/api/audit",
-            "health": "/api/health",
-        }
-    }), 200
+    """Root endpoint - redirect to frontend."""
+    frontend_url = os.getenv("FRONTEND_URL", "https://sinhas-frontend1.vercel.app")
+    return redirect(frontend_url, code=302)
 
 
 # ============ ERROR HANDLERS ============
