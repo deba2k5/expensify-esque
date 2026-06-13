@@ -10,6 +10,7 @@ import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGri
 export default function AdminDashboard() {
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [sessions, setSessions] = useState<WorkSession[]>([]);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -17,7 +18,10 @@ export default function AdminDashboard() {
       setSessions(await api.listSessions());
     };
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(() => {
+      setTick(prev => prev + 1);
+      load();
+    }, 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -26,6 +30,24 @@ export default function AdminDashboard() {
   const geofenceAlerts = sessions.flatMap((s) =>
     s.locations.filter((l) => l.outsideGeofence).map(() => s.email)
   );
+
+  // Function to calculate current work and break time for a session
+  const calculateSessionStats = (s: WorkSession) => {
+    const now = Date.now();
+    let workMs = s.totalWorkMs || 0;
+    let breakMs = s.totalBreakMs || 0;
+
+    if (!s.clockOut) {
+      // Calculate current work time (time since clock-in minus break time)
+      workMs = now - new Date(s.clockIn).getTime();
+      breakMs = s.breaks.reduce((sum, b) => {
+        const bEnd = b.end ? new Date(b.end).getTime() : now;
+        return sum + (bEnd - new Date(b.start).getTime());
+      }, 0);
+    }
+
+    return { workMs: Math.max(0, workMs - breakMs), breakMs };
+  };
 
   const workTypeData = useMemo(() => {
     const map = new Map<string, number>();
@@ -36,7 +58,8 @@ export default function AdminDashboard() {
   const hoursByEmployee = useMemo(() => {
     const map = new Map<string, number>();
     sessions.forEach((s) => {
-      const h = ((s.totalWorkMs || 0) - (s.totalBreakMs || 0)) / 3600000;
+      const stats = calculateSessionStats(s);
+      const h = stats.workMs / 3600000;
       map.set(s.fullName, (map.get(s.fullName) || 0) + h);
     });
     return Array.from(map.entries()).slice(0, 8).map(([name, hours]) => ({ name, hours: +hours.toFixed(1) }));

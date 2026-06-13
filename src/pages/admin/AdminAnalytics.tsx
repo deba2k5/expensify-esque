@@ -12,22 +12,54 @@ import { Download } from "lucide-react";
 export default function AdminAnalytics() {
   const [sessions, setSessions] = useState<WorkSession[]>([]);
   const [range, setRange] = useState("7");
+  const [, setTick] = useState(0);
 
-  useEffect(() => { api.listSessions().then(setSessions); }, []);
+  // Refresh sessions and tick every 10 seconds for real-time data
+  useEffect(() => {
+    const loadSessions = async () => {
+      const data = await api.listSessions();
+      setSessions(data);
+    };
+    loadSessions();
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+      loadSessions();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const cutoff = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - Number(range));
     return d.toISOString().slice(0, 10);
   }, [range]);
 
+  // Function to calculate current work and break time for a session
+  const calculateSessionStats = (s: WorkSession) => {
+    const now = Date.now();
+    let workMs = s.totalWorkMs || 0;
+    let breakMs = s.totalBreakMs || 0;
+
+    if (!s.clockOut) {
+      // Calculate current work time (time since clock-in minus break time)
+      workMs = now - new Date(s.clockIn).getTime();
+      breakMs = s.breaks.reduce((sum, b) => {
+        const bEnd = b.end ? new Date(b.end).getTime() : now;
+        return sum + (bEnd - new Date(b.start).getTime());
+      }, 0);
+    }
+
+    return { workMs: Math.max(0, workMs - breakMs), breakMs };
+  };
+
   const filtered = sessions.filter((s) => s.date >= cutoff);
 
   const byDay = useMemo(() => {
     const map = new Map<string, { work: number; brk: number }>();
     filtered.forEach((s) => {
+      const stats = calculateSessionStats(s);
       const cur = map.get(s.date) || { work: 0, brk: 0 };
-      cur.work += ((s.totalWorkMs || 0) - (s.totalBreakMs || 0)) / 3600000;
-      cur.brk += (s.totalBreakMs || 0) / 3600000;
+      cur.work += stats.workMs / 3600000;
+      cur.brk += stats.breakMs / 3600000;
       map.set(s.date, cur);
     });
     return Array.from(map.entries()).sort().map(([date, v]) => ({ date: date.slice(5), work: +v.work.toFixed(1), brk: +v.brk.toFixed(1) }));
@@ -36,7 +68,8 @@ export default function AdminAnalytics() {
   const byEmployee = useMemo(() => {
     const map = new Map<string, number>();
     filtered.forEach((s) => {
-      map.set(s.fullName, (map.get(s.fullName) || 0) + ((s.totalWorkMs || 0) - (s.totalBreakMs || 0)) / 3600000);
+      const stats = calculateSessionStats(s);
+      map.set(s.fullName, (map.get(s.fullName) || 0) + stats.workMs / 3600000);
     });
     return Array.from(map.entries()).map(([name, hours]) => ({ name, hours: +hours.toFixed(1) }));
   }, [filtered]);
@@ -48,8 +81,8 @@ export default function AdminAnalytics() {
   }, [filtered]);
 
   const colors = ["hsl(354 78% 49%)", "hsl(210 90% 50%)", "hsl(152 60% 38%)", "hsl(36 96% 50%)", "hsl(260 60% 55%)"];
-  const totalWork = filtered.reduce((s, x) => s + ((x.totalWorkMs || 0) - (x.totalBreakMs || 0)), 0);
-  const totalBreak = filtered.reduce((s, x) => s + (x.totalBreakMs || 0), 0);
+  const totalWork = filtered.reduce((s, x) => s + calculateSessionStats(x).workMs, 0);
+  const totalBreak = filtered.reduce((s, x) => s + calculateSessionStats(x).breakMs, 0);
   const productivity = totalWork + totalBreak > 0 ? Math.round((totalWork / (totalWork + totalBreak)) * 100) : 0;
 
   const exportToPDF = () => {
