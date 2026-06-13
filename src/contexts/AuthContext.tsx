@@ -119,19 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else setProfile(null);
   }, [user, refreshProfile]);
 
-  // Session inactivity timeout (30 min) — only when signed in
+  // Clean up timers when user logs out
   useEffect(() => {
-    if (!user) return;
-    
-    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
-    
     return () => {
-      events.forEach((e) => window.removeEventListener(e, resetTimer));
       window.clearTimeout(timerRef.current);
       window.clearTimeout(warningRef.current);
     };
-  }, [user, resetTimer]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(firebaseAuth, email, password);
