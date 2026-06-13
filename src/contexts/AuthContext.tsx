@@ -9,6 +9,7 @@ import {
 import { api } from "@/lib/api";
 import { isAdminEmail } from "@/lib/config";
 import type { EmployeeProfile, Role } from "@/lib/types";
+import { toast } from "sonner";
 
 interface AuthCtx {
   user: User | null;
@@ -18,16 +19,20 @@ interface AuthCtx {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  resetTimer: () => void;
 }
 
 const Ctx = createContext<AuthCtx | undefined>(undefined);
-const TIMEOUT_MS = 30 * 60 * 1000;
+const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const WARNING_MS = 5 * 60 * 1000; // 5 minutes before timeout
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const timerRef = useRef<number | undefined>(undefined);
+  const warningRef = useRef<number | undefined>(undefined);
+  const expiryTimeRef = useRef<number>(0);
 
   const role: Role = isAdminEmail(user?.email) ? "super_admin" : "employee";
 
@@ -50,13 +55,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(p);
   }, [user]);
 
+  const updateTimeouts = useCallback(() => {
+    window.clearTimeout(timerRef.current);
+    window.clearTimeout(warningRef.current);
+
+    const now = Date.now();
+    const timeUntilTimeout = expiryTimeRef.current - now;
+    const timeUntilWarning = timeUntilTimeout - WARNING_MS;
+
+    if (timeUntilWarning > 0) {
+      warningRef.current = window.setTimeout(() => {
+        toast.warning("Your session will expire in 5 minutes. Click Record to continue.");
+      }, timeUntilWarning);
+    } else if (timeUntilTimeout > 0) {
+      // If warning time is already past, show warning immediately
+      toast.warning("Your session will expire in 5 minutes. Click Record to continue.");
+    }
+
+    if (timeUntilTimeout > 0) {
+      timerRef.current = window.setTimeout(() => {
+        fbSignOut(firebaseAuth);
+        toast.error("Session expired due to inactivity. Please sign in again.");
+      }, timeUntilTimeout);
+    }
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    // Add 30 minutes to the current expiry time
+    const now = Date.now();
+    if (expiryTimeRef.current < now) {
+      // If expiry time is in past, set to now + 30 mins
+      expiryTimeRef.current = now + TIMEOUT_MS;
+    } else {
+      // If expiry time is in future, add 30 mins to it
+      expiryTimeRef.current += TIMEOUT_MS;
+    }
+    updateTimeouts();
+  }, [updateTimeouts]);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(firebaseAuth, (u) => {
       setUser(u);
       setLoading(false);
+      if (u) {
+        // Initialize expiry time when user signs in
+        expiryTimeRef.current = Date.now() + TIMEOUT_MS;
+        updateTimeouts();
+      }
     });
     return unsub;
-  }, []);
+  }, [updateTimeouts]);
 
   useEffect(() => {
     if (user) refreshProfile();
@@ -66,21 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Session inactivity timeout (30 min) — only when signed in
   useEffect(() => {
     if (!user) return;
-    const reset = () => {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = window.setTimeout(() => {
-        fbSignOut(firebaseAuth);
-        alert("Session expired due to inactivity. Please sign in again.");
-      }, TIMEOUT_MS);
-    };
+    
     const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    reset();
+    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
+    
     return () => {
-      events.forEach((e) => window.removeEventListener(e, reset));
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
       window.clearTimeout(timerRef.current);
+      window.clearTimeout(warningRef.current);
     };
-  }, [user]);
+  }, [user, resetTimer]);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmailAndPassword(firebaseAuth, email, password);
@@ -93,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, profile, role, loading, signIn, signOut, refreshProfile }}>
+    <Ctx.Provider value={{ user, profile, role, loading, signIn, signOut, refreshProfile, resetTimer }}>
       {children}
     </Ctx.Provider>
   );
