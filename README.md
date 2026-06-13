@@ -54,7 +54,7 @@ sinhastracker/
 5. Deploy!
 ```
 
-**Step 3: Deploy Frontend** (10 min)
+**Step 3: Deploy Frontend** (10 min) ok
 ```
 1. New Project on vercel.com
 2. Import repo

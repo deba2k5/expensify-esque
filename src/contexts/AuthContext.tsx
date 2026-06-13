@@ -63,6 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeUntilTimeout = expiryTimeRef.current - now;
     const timeUntilWarning = timeUntilTimeout - WARNING_MS;
 
+    console.log("[AuthContext] updateTimeouts called", {
+      now,
+      expiryTime: expiryTimeRef.current,
+      timeUntilTimeoutMs: timeUntilTimeout,
+      timeUntilTimeoutMinutes: timeUntilTimeout / 60000,
+    });
+
     if (timeUntilWarning > 0) {
       warningRef.current = window.setTimeout(() => {
         toast.warning("Your session will expire in 5 minutes. Click Record to continue.");
@@ -74,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (timeUntilTimeout > 0) {
       timerRef.current = window.setTimeout(() => {
+        console.log("[AuthContext] Logging out due to timeout");
         fbSignOut(firebaseAuth);
         toast.error("Session expired due to inactivity. Please sign in again.");
       }, timeUntilTimeout);

@@ -37,7 +37,7 @@ const BREAK_TYPES: { value: BreakEntry["type"]; label: string }[] = [
 const GEOFENCE_RADIUS = 100; // meters
 
 export default function EmployeeDashboard() {
-  const { profile, user } = useAuth();
+  const { profile, user, resetTimer } = useAuth();
   const [session, setSession] = useState<WorkSession | null>(null);
   const [tick, setTick] = useState(0);
   const [history, setHistory] = useState<WorkSession[]>([]);
@@ -337,9 +337,19 @@ export default function EmployeeDashboard() {
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
             Hello, {profile?.fullName?.split(" ")[0] || "there"}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground mb-2">
             {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
+          <Button
+            onClick={() => {
+              resetTimer();
+              toast.success("Session extended for 30 minutes");
+            }}
+            variant="outline"
+            size="sm"
+          >
+            Record
+          </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {activeTravel ? (
