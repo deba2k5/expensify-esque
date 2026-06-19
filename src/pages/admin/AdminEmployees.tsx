@@ -166,9 +166,9 @@ export default function AdminEmployees() {
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Employees</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} of {profiles.length}</p>
+        <div className="page-header">
+          <h1>Employees</h1>
+          <p>{filtered.length} of {profiles.length} total employees</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={exportCsv} className="gap-2 flex-1 sm:flex-none"><FileSpreadsheet className="h-4 w-4" /><span className="hidden xs:inline">Export </span>CSV</Button>
