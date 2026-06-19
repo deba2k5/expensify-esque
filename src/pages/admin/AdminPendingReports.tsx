@@ -28,9 +28,18 @@ export default function AdminPendingReports() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Pending reports</h1>
+      <div className="page-header">
+        <h1>Pending reports</h1>
+        <p>Review and approve submitted work sessions.</p>
+      </div>
       {sessions.length === 0 && (
-        <Card className="p-10 text-center text-muted-foreground">All caught up — no pending reports.</Card>
+        <Card className="p-10 text-center text-muted-foreground shadow-card">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-success/10 mb-3">
+            <Check className="h-5 w-5 text-success" />
+          </div>
+          <p className="font-medium">All caught up</p>
+          <p className="text-sm">No pending reports to review.</p>
+        </Card>
       )}
       <div className="space-y-4">
         {sessions.map((s) => (

@@ -146,10 +146,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Admin overview</h1>
-        <p className="text-sm text-muted-foreground">Real-time workforce activity across Sinha's Group.</p>
-      </header>
+      <div className="page-header">
+        <h1>Admin overview</h1>
+        <p>Real-time workforce activity across Sinha's Group.</p>
+      </div>
 
       {forgotLogout.length > 0 && (
         <Card className="p-5 border-warning/40 bg-gradient-to-br from-warning/10 via-warning/5 to-transparent shadow-card">

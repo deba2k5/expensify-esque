@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Download } from "lucide-react";
+import { Download, Clock, Coffee, TrendingUp } from "lucide-react";
 
 export default function AdminAnalytics() {
   const [sessions, setSessions] = useState<WorkSession[]>([]);
@@ -120,9 +120,9 @@ export default function AdminAnalytics() {
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Productivity, work-type mix, and per-employee hours.</p>
+        <div className="page-header">
+          <h1>Analytics</h1>
+          <p>Productivity, work-type mix, and per-employee hours.</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={exportToPDF} className="gap-2">
@@ -141,9 +141,33 @@ export default function AdminAnalytics() {
       </header>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-xl sm:text-2xl font-semibold">{productivity}%</div></Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary grid place-items-center">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total work time</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{fmtDuration(totalWork)}</div>
+        </Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-warning/10 text-warning grid place-items-center">
+              <Coffee className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total break time</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{fmtDuration(totalBreak)}</div>
+        </Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-success/10 text-success grid place-items-center">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Productivity</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{productivity}%</div>
+        </Card>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
