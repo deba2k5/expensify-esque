@@ -120,9 +120,9 @@ export default function AdminAnalytics() {
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Productivity, work-type mix, and per-employee hours.</p>
+        <div className="page-header">
+          <h1>Analytics</h1>
+          <p>Productivity, work-type mix, and per-employee hours.</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={exportToPDF} className="gap-2">
