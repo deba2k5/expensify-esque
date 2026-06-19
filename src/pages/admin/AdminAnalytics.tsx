@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Download } from "lucide-react";
+import { Download, Clock, Coffee, TrendingUp } from "lucide-react";
 
 export default function AdminAnalytics() {
   const [sessions, setSessions] = useState<WorkSession[]>([]);
