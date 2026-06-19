@@ -141,9 +141,33 @@ export default function AdminAnalytics() {
       </header>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total work time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalWork)}</div></Card>
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Total break time</div><div className="text-xl sm:text-2xl font-semibold">{fmtDuration(totalBreak)}</div></Card>
-        <Card className="p-4 hover-lift"><div className="text-xs text-muted-foreground">Productivity</div><div className="text-xl sm:text-2xl font-semibold">{productivity}%</div></Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary grid place-items-center">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total work time</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{fmtDuration(totalWork)}</div>
+        </Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-warning/10 text-warning grid place-items-center">
+              <Coffee className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total break time</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{fmtDuration(totalBreak)}</div>
+        </Card>
+        <Card className="p-5 hover-lift shadow-card border-border/60">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-success/10 text-success grid place-items-center">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Productivity</div>
+          </div>
+          <div className="text-2xl font-semibold tracking-tight">{productivity}%</div>
+        </Card>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
